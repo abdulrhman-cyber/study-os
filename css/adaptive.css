@@ -50,11 +50,14 @@ pre, code { max-width: 100%; overflow-x: auto; }
   }
 }
 
+/* زر الإضافة السريعة (FAB): يتبع اتجاه الصفحة — يسار في RTL (كما كان) ويمين في LTR،
+   مع احترام مناطق الأمان. لا يُثبَّت على اليمين في RTL. */
 .fab-wrap {
-  left: auto;
-  right: max(26px, env(safe-area-inset-right));
+  inset-inline-end: auto;
   bottom: max(26px, env(safe-area-inset-bottom));
 }
+html[dir="rtl"] .fab-wrap { left: max(26px, env(safe-area-inset-left)); right: auto; }
+html[dir="ltr"] .fab-wrap { right: max(26px, env(safe-area-inset-right)); left: auto; }
 .toast-root { bottom: max(24px, env(safe-area-inset-bottom)); }
 .modal-root {
   padding-top: max(20px, env(safe-area-inset-top));
