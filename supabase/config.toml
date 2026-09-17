@@ -1,0 +1,4 @@
+# ═══ STUDY OS — إعداد Supabase CLI ═══
+# دالة الإرسال تُنادى من pg_cron برأس x-cron-secret وليس JWT، لذا نعطّل التحقق.
+[functions.send-due-push]
+verify_jwt = false

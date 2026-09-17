@@ -1,0 +1,13 @@
+{
+  "appId": "com.studyos.app",
+  "appName": "Study OS",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#0f1115"
+  },
+  "plugins": {}
+}

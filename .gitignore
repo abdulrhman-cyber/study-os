@@ -1,0 +1,8 @@
+_img-originals/
+_site/
+*.apk
+*.bak
+*.log
+.DS_Store
+Thumbs.db
+supabase/.temp/

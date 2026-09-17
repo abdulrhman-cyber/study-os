@@ -1,0 +1,9 @@
+{
+  "name": "study-os",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Study OS - static web app (HTML/CSS/JS) prepared for GitHub Pages",
+  "scripts": {
+    "build": "node scripts/build-pages.mjs"
+  }
+}
