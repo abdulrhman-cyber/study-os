@@ -361,7 +361,7 @@ const syncBody =
           '<input type="password" class="input" id="ai-settings-key" placeholder="أدخل Gemini API Key" style="min-width:200px" autocomplete="off">' +
           '<button class="btn sm" id="ai-settings-toggle-vis" aria-label="إظهار/إخفاء المفتاح">' + I.get("info", 13) + '</button>' +
         '</div></div>' +
-      '<div class="set-row"><div class="sr-txt"><b>النموذج</b><span>gemini-2.5-flash-lite</span></div></div>' +
+      '<div class="set-row"><div class="sr-txt"><b>النموذج</b><span>gemini-3.6-flash</span></div></div>' +
       '<div class="set-foot" style="flex-wrap:wrap;gap:8px">' +
         '<button class="btn sm primary" id="ai-settings-save">حفظ المفتاح</button>' +
         '<button class="btn sm ghost" id="ai-settings-test">اختبار الاتصال</button>' +
@@ -608,7 +608,7 @@ const syncBody =
         try {
           const data = await aiFetch("GET");
           if (data && data.ok && data.configured){
-            if (statusEl) statusEl.textContent = "تم الإعداد — النموذج: " + (data.model || "gemini-2.5-flash-lite");
+            if (statusEl) statusEl.textContent = "تم الإعداد — النموذج: " + (data.model || "gemini-3.6-flash");
             if (badgeEl){ badgeEl.textContent = "مُعد"; badgeEl.className = "badge emerald"; }
           } else {
             if (statusEl) statusEl.textContent = "لم يُضف مفتاح بعد.";

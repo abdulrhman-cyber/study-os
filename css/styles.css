@@ -1631,3 +1631,37 @@ html[data-theme="light"] .ai-md pre{background:rgba(9,10,12,.8)}
   .ai-msg,.ai-quick .quick,.ai-w-title,.ai-w-hello,.ai-w-sub,.ai-logo,
   .ai-logo .ai-spark,.ai-status-dot::after,.ai-msg.thinking .t,.ai-notice.show{animation:none !important}
 }
+
+/* ══ Lecture Summaries ══ */
+.ls-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.ls-card{padding:16px;display:flex;flex-direction:column;gap:10px}
+.ls-card-head{display:flex;align-items:flex-start;gap:12px}
+.ls-card-icon{flex-shrink:0;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(255,255,255,.06)}
+.ls-card-meta{flex:1;min-width:0}
+.ls-card-title{font-weight:700;font-size:14px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ls-card-sub{margin-top:2px}
+.ls-card-status{display:flex;align-items:center;justify-content:space-between}
+.ls-card-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ls-menu-wrap{position:relative}
+.ls-dropdown{position:absolute;bottom:100%;left:0;min-width:180px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:50;display:flex;flex-direction:column;gap:2px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.ls-dropdown button{display:flex;align-items:center;gap:8px;padding:8px 12px;border:none;background:none;color:var(--text);border-radius:6px;cursor:pointer;font-size:13px;text-align:right;width:100%}
+.ls-dropdown button:hover{background:var(--glass-2)}
+.ls-dropdown button.danger{color:var(--red)}
+.ls-dropdown button.danger:hover{background:rgba(220,50,50,.1)}
+.ls-upload-row{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-bottom:1px solid var(--line)}
+.ls-upload-row:last-child{border-bottom:none}
+.ls-upload-row .input{width:100%}
+.ls-viewer-wrap{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;background:var(--bg)}
+.ls-overlay{position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.6)}
+.ls-viewer{display:flex;flex-direction:column;height:100%}
+.ls-viewer-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);gap:12px;flex-shrink:0}
+.ls-viewer-head>div:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.ls-viewer-actions{display:flex;gap:6px;flex-shrink:0}
+.ls-viewer-body{flex:1;overflow:hidden}
+.ls-viewer-frame{width:100%;height:100%;border:none}
+@media(max-width:600px){
+  .ls-grid{grid-template-columns:1fr}
+  .ls-card-actions{flex-direction:column;align-items:stretch}
+  .ls-card-actions .btn{width:100%}
+  .ls-viewer-head{flex-direction:column;align-items:flex-start}
+}

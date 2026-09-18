@@ -1,5 +1,5 @@
 /* ═══════════════ STUDY OS — Edge Function: ai-settings ═══════════════
-   إدارة مفتاح Gemini API الخاص بالمستخدم.
+   إدارة مفتاح Gemini API الخاص بال المستخدم.
    - GET: هل المستخدم عنده مفتاح + النموذج؟
    - POST: حفظ/تحديث المفتاح (مشفر AES-GCM) + اختبار الاتصال
    - DELETE: حذف المفتاح
@@ -19,13 +19,19 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const sb = createClient(
-  Deno.env.get("SUPABASE_URL") || "http://localhost:54321",
-  Deno.env.get("SUPABASE_ANON_KEY") || "anon",
-  { auth: { persistSession: false } }
-);
-
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "http://localhost:54321";
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "anon";
 const ENCRYPTION_KEY = Deno.env.get("AI_SETTINGS_ENCRYPTION_KEY") || "";
+
+/* ── Create a per-request Supabase client with the user's JWT ── */
+function userClient(accessToken: string) {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false },
+    global: {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    }
+  });
+}
 
 /* ── AES-GCM encryption helpers ── */
 function hexToBytes(hex: string): Uint8Array {
@@ -67,11 +73,14 @@ async function decrypt(cipherHex: string, hexKey: string): Promise<string> {
   return new TextDecoder().decode(plainBuf);
 }
 
+/* ── Verify JWT and return user info ── */
 async function requireUser(req: Request): Promise<{ ok: boolean; userId?: string; error?: string; token?: string }> {
   const auth = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   if (!auth) return { ok: false, error: "غير مسجّل الدخول." };
   try {
-    const result = await sb.auth.getUser(auth);
+    /* Verify JWT using a throwaway client (anon key only, no user context needed) */
+    const verifySb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+    const result = await verifySb.auth.getUser(auth);
     if (result.error || !result.data?.user) {
       return { ok: false, error: "جلسة غير صالحة." };
     }
@@ -87,20 +96,22 @@ Deno.serve(async (req: Request) => {
   const user = await requireUser(req);
   if (!user.ok) return json({ ok: false, error: user.error }, 401);
   const userId = user.userId!;
+  const accessToken = user.token!;
 
-  /* Set the JWT on the Supabase client so auth.uid() works in RLS policies */
-  await sb.auth.setSession({ access_token: user.token!, refresh_token: "" });
+  /* Create a client authenticated as this user — auth.uid() = userId in RLS */
+  const sb = userClient(accessToken);
 
   if (!ENCRYPTION_KEY) return json({ ok: false, error: "AI_SETTINGS_ENCRYPTION_KEY غير مضبوط." }, 500);
 
   try {
     if (req.method === "GET") {
-      const { data } = await sb
+      const { data, error: selErr } = await sb
         .from("ai_settings")
         .select("gemini_api_key_encrypted, gemini_model, created_at, updated_at")
         .eq("user_id", userId)
         .maybeSingle();
 
+      if (selErr) return json({ ok: false, error: "خطأ في قاعدة البيانات: " + selErr.message }, 500);
       if (!data) return json({ ok: true, configured: false });
 
       return json({
@@ -113,7 +124,8 @@ Deno.serve(async (req: Request) => {
     }
 
     if (req.method === "DELETE") {
-      await sb.from("ai_settings").delete().eq("user_id", userId);
+      const { error: delErr } = await sb.from("ai_settings").delete().eq("user_id", userId);
+      if (delErr) return json({ ok: false, error: "تعذر الحذف: " + delErr.message }, 500);
       return json({ ok: true });
     }
 
@@ -124,15 +136,16 @@ Deno.serve(async (req: Request) => {
       const action = body.action || "save";
 
       if (action === "test") {
-        const { data } = await sb
+        const { data, error: selErr } = await sb
           .from("ai_settings")
           .select("gemini_api_key_encrypted, gemini_model")
           .eq("user_id", userId)
           .maybeSingle();
+        if (selErr) return json({ ok: false, error: "خطأ في قاعدة البيانات: " + selErr.message }, 500);
         if (!data) return json({ ok: false, error: "لم تُضف مفتاحًا بعد." }, 404);
 
         const plainKey = await decrypt(data.gemini_api_key_encrypted, ENCRYPTION_KEY);
-        const model = data.gemini_model || "gemini-2.5-flash-lite";
+        const model = data.gemini_model || "gemini-3.6-flash";
         const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${plainKey}`;
         const res = await fetch(testUrl, {
           method: "POST",
@@ -150,14 +163,14 @@ Deno.serve(async (req: Request) => {
       }
 
       const apiKey = (body.apiKey || "").trim();
-      const model = (body.model || "gemini-2.5-flash-lite").trim();
+      const model = (body.model || "gemini-3.6-flash").trim();
 
       if (!apiKey) return json({ ok: false, error: "أدخل مفتاح Gemini API." }, 400);
-      if (model !== "gemini-2.5-flash-lite") return json({ ok: false, error: "النموذج المدعوم حاليًا: gemini-2.5-flash-lite فقط." }, 400);
+      if (model !== "gemini-3.6-flash") return json({ ok: false, error: "النموذج المدعوم حاليًا: gemini-3.6-flash فقط." }, 400);
 
       const encrypted = await encrypt(apiKey, ENCRYPTION_KEY);
 
-      const { error } = await sb
+      const { error: upErr } = await sb
         .from("ai_settings")
         .upsert({
           user_id: userId,
@@ -166,7 +179,7 @@ Deno.serve(async (req: Request) => {
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id" });
 
-      if (error) return json({ ok: false, error: "تعذر الحفظ: " + error.message }, 500);
+      if (upErr) return json({ ok: false, error: "تعذر الحفظ: " + upErr.message }, 500);
       return json({ ok: true });
     }
 

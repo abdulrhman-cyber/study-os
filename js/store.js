@@ -36,7 +36,7 @@ App.Store = (function () {
       },
       xp: 0,
       tasks: [], homework: [], blocks: [], mistakes: [], notes: [], exams: [],
-      notifications: [], activityLog: [], unlocked: {},
+      notifications: [], activityLog: [], unlocked: {}, summaries: [],
       pomodoroCount: 0,
       daily: {},
       studyPlans: [],
@@ -101,7 +101,7 @@ App.Store = (function () {
     if (!st.daily) st.daily = {};
     if (!st.activityLog) st.activityLog = [];
     if (!st.unlocked) st.unlocked = {};
-    ["tasks","homework","blocks","mistakes","notes","exams","notifications","levelUps","studyPlans"].forEach(k => {
+    ["tasks","homework","blocks","mistakes","notes","exams","notifications","levelUps","studyPlans","summaries"].forEach(k => {
       if (!Array.isArray(st[k])) st[k] = [];
     });
     // legacy mistakes: backfill spaced-review scheduling fields
@@ -453,6 +453,36 @@ App.Store = (function () {
     const n = findNote(id); if (!n) return;
     n.archived = !n.archived;
     changed("note_archived");
+  }
+
+  /* ══ SUMMARIES ══ */
+  function addSummary(data){
+    const s = Object.assign({
+      id: U.uid(), subjectId: D.defSubject(), title: "", lectureNumber: null,
+      unit: "", filePath: "", fileName: "", fileSize: 0,
+      status: "unread", isFavorite: false, lastPage: 0,
+      createdAt: U.iso(), updatedAt: U.iso()
+    }, data);
+    state.summaries.push(s);
+    logActivity("أضفت ملخص: «" + s.title + "»", "notes", "info");
+    changed("summary_added");
+    return s;
+  }
+  function findSummary(id){ return state.summaries.find(s => s.id === id); }
+  function updateSummary(id, patch){
+    const s = findSummary(id); if (!s) return;
+    patch.updatedAt = U.iso();
+    Object.assign(s, patch);
+    changed("summary_updated");
+  }
+  function deleteSummary(id){
+    state.summaries = state.summaries.filter(s => s.id !== id);
+    changed("summary_deleted");
+  }
+  function toggleSummaryFavorite(id){
+    const s = findSummary(id); if (!s) return;
+    s.isFavorite = !s.isFavorite;
+    changed("summary_favorited");
   }
 
   /* ══ SETTINGS / user ══ */
@@ -1090,6 +1120,7 @@ App.Store = (function () {
     addMistake, updateMistake, deleteMistake, findMistake, recordReview,
     reviewQueue, reviewSchedules, addExam, dailySummary, dailySummaryText,
     addNote, updateNote, deleteNote, findNote, togglePin, toggleArchive,
+    addSummary, findSummary, updateSummary, deleteSummary, toggleSummaryFavorite,
     updateSettings, updateUser,
     grantXP, xpOf, evaluateAchievements,
     addNotif, markRead, markAllRead, clearNotifications, unreadCount,

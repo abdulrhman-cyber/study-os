@@ -21,13 +21,19 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const sb = createClient(
-  Deno.env.get("SUPABASE_URL") || "http://localhost:54321",
-  Deno.env.get("SUPABASE_ANON_KEY") || "anon",
-  { auth: { persistSession: false } }
-);
-
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "http://localhost:54321";
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "anon";
 const ENCRYPTION_KEY = Deno.env.get("AI_SETTINGS_ENCRYPTION_KEY") || "";
+
+/* ── Create a per-request Supabase client with the user's JWT ── */
+function userClient(accessToken: string) {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false },
+    global: {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    }
+  });
+}
 
 /* ── AES-GCM decryption ── */
 function hexToBytes(hex: string): Uint8Array {
@@ -162,7 +168,8 @@ Deno.serve(async (req: Request) => {
 
   let userId: string;
   try {
-    const result = await sb.auth.getUser(auth);
+    const verifySb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+    const result = await verifySb.auth.getUser(auth);
     if (result.error || !result.data?.user) {
       return json({ ok: false, code: "auth", error: "جلسة غير صالحة." }, 401);
     }
@@ -171,8 +178,8 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, code: "auth", error: "تعذر التحقق من الجلسة." }, 401);
   }
 
-  /* Set the JWT on the Supabase client so auth.uid() works in RLS policies */
-  await sb.auth.setSession({ access_token: auth, refresh_token: "" });
+  /* Create a client authenticated as this user — auth.uid() = userId in RLS */
+  const sb = userClient(auth);
 
   /* ── env ── */
   if (!ENCRYPTION_KEY) return json({ ok: false, error: "AI_SETTINGS_ENCRYPTION_KEY غير مضبوط." }, 500);
@@ -205,7 +212,7 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "تعذر فك تشفير المفتاح." }, 500);
   }
 
-  const model = settings.gemini_model || "gemini-2.5-flash-lite";
+  const model = settings.gemini_model || "gemini-3.6-flash";
 
   /* ── build & call ── */
   const contents = buildContents(mode, message, context, history);

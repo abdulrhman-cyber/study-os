@@ -79,7 +79,7 @@ window.App = window.App || {};
   const NAV_GROUPS = [
     ["الرئيسية", ["dashboard"]],
     ["الدراسة", ["subjects", "sessions", "timer"]],
-    ["التنظيم", ["todo", "homework", "calendar", "notes"]],
+    ["التنظيم", ["todo", "homework", "calendar", "notes", "summaries"]],
     ["التحليل", ["analytics", "errors", "achievements"]],
     ["النظام", ["notifications"]],
     ["المساعد", ["ai-assistant"]]

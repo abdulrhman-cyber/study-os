@@ -5,7 +5,7 @@ create table if not exists public.ai_settings (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   gemini_api_key_encrypted text not null,
-  gemini_model text not null default 'gemini-2.5-flash-lite',
+  gemini_model text not null default 'gemini-3.6-flash',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint ai_settings_user_id_key unique (user_id)
