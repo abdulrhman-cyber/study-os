@@ -130,6 +130,13 @@ App.Views = App.Views || {};
   /* ── Toolbar ── */
   function toolbarHTML(){
     const statuses = [["all", "الكل"], ["unread", "لم تبدأ"], ["reading", "قيد القراءة"], ["read", "تمت القراءة"]];
+    const sortOptions = [
+      ["lecture_number", "رقم المحاضرة"],
+      ["newest", "الأحدث"],
+      ["oldest", "الأقدم"],
+      ["name", "الاسم"]
+    ];
+    const currentSort = sortOptions.find(o => o[0] === sortBy) || sortOptions[0];
     return '<div class="ls-toolbar">' +
       '<div class="ls-toolbar-left">' +
         '<div class="ls-search-wrap">' +
@@ -142,12 +149,17 @@ App.Views = App.Views || {};
         '<button class="ls-filter-chip' + (filterFav ? " active" : "") + '" data-ls-fav>' + I.get("star", 12) + ' المفضلة</button>' +
       '</div>' +
       '<div class="ls-toolbar-right">' +
-        '<select class="ls-sort-select" id="ls-sort">' +
-          '<option value="lecture_number"' + (sortBy === "lecture_number" ? " selected" : "") + '>رقم المحاضرة</option>' +
-          '<option value="newest"' + (sortBy === "newest" ? " selected" : "") + '>الأحدث</option>' +
-          '<option value="oldest"' + (sortBy === "oldest" ? " selected" : "") + '>الأقدم</option>' +
-          '<option value="name"' + (sortBy === "name" ? " selected" : "") + '>الاسم</option>' +
-        '</select>' +
+        '<div class="ls-sort-dropdown" id="ls-sort-dropdown">' +
+          '<button class="ls-sort-btn" id="ls-sort-btn">' + I.get("sort", 14) + ' <span class="ls-sort-label">' + currentSort[1] + '</span>' + I.get("chevron-down", 12) + '</button>' +
+          '<div class="ls-sort-menu" id="ls-sort-menu" hidden>' +
+            sortOptions.map(([v, t]) =>
+              '<button class="ls-sort-option' + (sortBy === v ? " active" : "") + '" data-ls-sort="' + v + '">' +
+                (sortBy === v ? '<span class="ls-sort-check">' + I.get("check", 14) + '</span>' : '<span class="ls-sort-check"></span>') +
+                t +
+              '</button>'
+            ).join("") +
+          '</div>' +
+        '</div>' +
         '<button class="btn primary sm" id="ls-add">' + I.get("plus", 13) + ' <span>إضافة ملخص</span></button>' +
       '</div>' +
     '</div>';
@@ -472,17 +484,31 @@ App.Views = App.Views || {};
       if (favFilter){ filterFav = !filterFav; refresh(); return; }
       const addBtn = e.target.closest("#ls-add, #ls-empty-add");
       if (addBtn){ triggerAdd(); return; }
+      const settingsBtn = e.target.closest("#ls-subjects-settings");
+      if (settingsBtn){ location.hash = "#/settings"; return; }
+      const sortBtn = e.target.closest("#ls-sort-btn");
+      if (sortBtn){
+        const menu = root.querySelector("#ls-sort-menu");
+        if (menu) menu.hidden = !menu.hidden;
+        return;
+      }
+      const sortOpt = e.target.closest("[data-ls-sort]");
+      if (sortOpt){
+        sortBy = sortOpt.dataset.lsSort;
+        const menu = root.querySelector("#ls-sort-menu");
+        if (menu) menu.hidden = true;
+        refreshList();
+        return;
+      }
     });
 
     root.addEventListener("input", e => {
       if (e.target.id === "ls-search"){ searchQuery = e.target.value; refreshList(); }
     });
-    root.addEventListener("change", e => {
-      if (e.target.id === "ls-sort"){ sortBy = e.target.value; refreshList(); }
-    });
 
     document.addEventListener("click", e => {
       if (!e.target.closest(".ls-menu-wrap")) root.querySelectorAll(".ls-dropdown").forEach(d => d.hidden = true);
+      if (!e.target.closest(".ls-sort-dropdown")) root.querySelectorAll(".ls-sort-menu").forEach(d => d.hidden = true);
     });
   }
 

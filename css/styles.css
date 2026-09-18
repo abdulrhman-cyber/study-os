@@ -1668,6 +1668,17 @@ html[data-theme="light"] .ai-md pre{background:rgba(9,10,12,.8)}
 .ls-filter-chip.active{background:rgba(214,183,122,.12);border-color:var(--brd-2);color:var(--gold-2)}
 .ls-sort-select{padding:7px 30px 7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--solid);color:var(--text-2);font-size:12px;font-weight:700;cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239B9A95' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
 
+.ls-sort-dropdown{position:relative}
+.ls-sort-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--text-2);font-size:12px;font-weight:700;cursor:pointer;transition:all .18s var(--ease);white-space:nowrap}
+.ls-sort-btn:hover{border-color:var(--line-strong);color:var(--text)}
+.ls-sort-btn svg{flex-shrink:0}
+.ls-sort-label{line-height:1}
+.ls-sort-menu{position:absolute;top:calc(100% + 6px);inset-inline-end:0;min-width:180px;background:var(--solid);border:1px solid var(--line-strong);border-radius:var(--r-md);padding:6px;z-index:50;display:flex;flex-direction:column;gap:2px;box-shadow:var(--sh-md);animation:ls-dd-in .18s var(--ease)}
+.ls-sort-option{display:flex;align-items:center;gap:8px;padding:8px 12px;border:none;background:none;color:var(--text-2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;text-align:right;width:100%;transition:background .15s}
+.ls-sort-option:hover{background:var(--chip);color:var(--text)}
+.ls-sort-option.active{color:var(--gold-2);background:rgba(214,183,122,.08)}
+.ls-sort-check{width:16px;display:flex;flex-shrink:0;color:var(--gold-2)}
+
 .ls-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;flex:1;align-content:start}
 .ls-card{padding:0;display:flex;flex-direction:column;overflow:hidden;transition:transform .22s var(--ease),box-shadow .22s var(--ease);cursor:default}
 .ls-card:hover{transform:translateY(-4px);box-shadow:var(--shadow-3)}
