@@ -26,12 +26,12 @@ App.Data = (function () {
     { route: "homework",      num: "06", name: "الواجبات",   en: "Homeworks",        icon: "homework" },
     { route: "calendar",      num: "07", name: "التقويم",    en: "Calendar",         icon: "calendar" },
     { route: "notes",         num: "08", name: "الملاحظات",  en: "Notes",            icon: "notes" },
-    { route: "analytics",     num: "09", name: "التحليلات",  en: "Analytics",        icon: "analytics" },
-    { route: "errors",        num: "10", name: "بنك الأخطاء", en: "Error Bank",      icon: "errors" },
-    { route: "achievements",  num: "11", name: "الإنجازات",  en: "Achievements",     icon: "achievements" },
-    { route: "notifications", num: "12", name: "التنبيهات",  en: "Notifications",    icon: "bell" },
-    { route: "ai-assistant", num: "13", name: "المساعد الذكي", en: "AI Assistant", icon: "robot" },
-    { route: "summaries",    num: "14", name: "ملخصات المحاضرات", en: "Lecture Summaries", icon: "book" }
+    { route: "summaries",    num: "09", name: "ملخصات المحاضرات", en: "Lecture Summaries", icon: "book" },
+    { route: "analytics",     num: "10", name: "التحليلات",  en: "Analytics",        icon: "analytics" },
+    { route: "errors",        num: "11", name: "بنك الأخطاء", en: "Error Bank",      icon: "errors" },
+    { route: "achievements",  num: "12", name: "الإنجازات",  en: "Achievements",     icon: "achievements" },
+    { route: "notifications", num: "13", name: "التنبيهات",  en: "Notifications",    icon: "bell" },
+    { route: "ai-assistant", num: "14", name: "المساعد الذكي", en: "AI Assistant", icon: "robot" }
   ];
   const pageByRoute = {};
   navPages.forEach(p => pageByRoute[p.route] = p);
