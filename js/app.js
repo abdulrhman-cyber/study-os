@@ -45,6 +45,30 @@ window.App = window.App || {};
   window.addEventListener("resize", fitTopbarTitle);
   window.addEventListener("load", fitTopbarTitle);
 
+  /* البحث في الشريط العلوي: عند ضيق المساحة لا نسمح بسحق زر القائمة/الأيقونات.
+     القاعدة CSS (≤830) تُقلّص البحث إلى أيقونة. هنا نتحقق من المساحة الفعلية
+     فنجبر نفس السلوك breakeven ضمن المدى 831–899 بأي اسم العناصر/خط عرض. */
+  let searchIconForced = false;
+  function fitTopbarSpace(){
+    const bar = document.querySelector(".topbar");
+    const menu = $("tb-menu");
+    const s = $("tb-search");
+    if (!bar || !menu || !s) return;
+    if (searchIconForced){
+      if (window.innerWidth >= 900) searchIconForced = false;   // متسع بوضوح: نعيد النص
+    } else {
+      const natural = menu.offsetWidth;                          // 38 إذا لم يُسحق
+      if (natural > 0 && natural < 30 && window.innerWidth < 900) searchIconForced = true;
+    }
+    s.classList.toggle("tb-search-icon", searchIconForced);
+  }
+  function fitTopbar(){
+    fitTopbarSpace();     // أولًا: شكل البحث يؤثر على المساحة المتاحة للعنوان
+    fitTopbarTitle();
+  }
+  window.addEventListener("resize", fitTopbar);
+  window.addEventListener("load", fitTopbar);
+
   /* يعلّم الصفحة أنها تعمل داخل تطبيق أندرويد (Capacitor) لإخفاء اسم الصفحة من الشريط العلوي */
   function markNative(){
     const isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === "function" && window.Capacitor.isNativePlatform());
@@ -98,7 +122,7 @@ window.App = window.App || {};
     $("side-user-grade").textContent = st.user.grade || "ثانية ثانوي — بكالوريا";
 
     $("tb-title").textContent = App.Views.titles[routeN] || routeN;
-    fitTopbarTitle();
+    fitTopbar();
     $("tb-streak").innerHTML = I.get("flame", 14) + '<b class="num">' + D.streakOf(st) + '</b>';
     $("tb-xp").innerHTML = I.get("xp", 14) + '<b class="num">' + U.fmtNum(st.xp) + '</b>';
     $("tb-theme").innerHTML = st.settings.theme === "light" ? I.get("moon", 18) : I.get("sun", 18);

@@ -91,6 +91,17 @@ html[dir="ltr"] .fab-wrap { right: max(26px, env(safe-area-inset-right)); left: 
   .view { max-width: 1660px; }
 }
 
+/* الشريط العلوي: عندما لا تتسع مساحة البحث الكاملة (أيقونة + نص + اختصار)
+   بجانب زر القائمة والأزرار، نُقلّص البحث إلى أيقونة فقط بدل أن يُسحق عنصرًا.
+   ثابت لكل الصفحات، لذا نقطة انعطاف واحدة تكفي (المساحة الفعلية تُتحقق أيضًا
+   عبر fitTopbarSpace في app.js ويُطبَّق class). */
+@media (max-width: 830px) {
+  .tb-search { max-width: 44px; min-width: 44px; padding: 8px; justify-content: center; }
+  .tb-search .txt, .tb-search kbd { display: none; }
+}
+.tb-search.tb-search-icon { max-width: 44px; min-width: 44px; padding: 8px; justify-content: center; }
+.tb-search.tb-search-icon .txt, .tb-search.tb-search-icon kbd { display: none; }
+
 /* ── 4) جوالات ضيقة: 400px وما دون ───────────────────────────────────── */
 @media (max-width: 400px) {
   .tb-actions #tb-xp { display: none; }
