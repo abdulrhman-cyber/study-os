@@ -171,6 +171,9 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, code: "auth", error: "تعذر التحقق من الجلسة." }, 401);
   }
 
+  /* Set the JWT on the Supabase client so auth.uid() works in RLS policies */
+  await sb.auth.setSession({ access_token: auth, refresh_token: "" });
+
   /* ── env ── */
   if (!ENCRYPTION_KEY) return json({ ok: false, error: "AI_SETTINGS_ENCRYPTION_KEY غير مضبوط." }, 500);
 

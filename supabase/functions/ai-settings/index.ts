@@ -67,7 +67,7 @@ async function decrypt(cipherHex: string, hexKey: string): Promise<string> {
   return new TextDecoder().decode(plainBuf);
 }
 
-async function requireUser(req: Request): Promise<{ ok: boolean; userId?: string; error?: string }> {
+async function requireUser(req: Request): Promise<{ ok: boolean; userId?: string; error?: string; token?: string }> {
   const auth = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   if (!auth) return { ok: false, error: "غير مسجّل الدخول." };
   try {
@@ -75,7 +75,7 @@ async function requireUser(req: Request): Promise<{ ok: boolean; userId?: string
     if (result.error || !result.data?.user) {
       return { ok: false, error: "جلسة غير صالحة." };
     }
-    return { ok: true, userId: result.data.user.id };
+    return { ok: true, userId: result.data.user.id, token: auth };
   } catch {
     return { ok: false, error: "تعذر التحقق من الجلسة." };
   }
@@ -87,6 +87,9 @@ Deno.serve(async (req: Request) => {
   const user = await requireUser(req);
   if (!user.ok) return json({ ok: false, error: user.error }, 401);
   const userId = user.userId!;
+
+  /* Set the JWT on the Supabase client so auth.uid() works in RLS policies */
+  await sb.auth.setSession({ access_token: user.token!, refresh_token: "" });
 
   if (!ENCRYPTION_KEY) return json({ ok: false, error: "AI_SETTINGS_ENCRYPTION_KEY غير مضبوط." }, 500);
 
