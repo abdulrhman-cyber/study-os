@@ -1,24 +1,25 @@
 /* ═══════════════ STUDY OS — Edge Function: ai-assistant ═══════════════
-   الوسيط الآمن بين Study OS و Gemini API.
-   المتصفح لا يخاطب Gemini أبدًا — كل الطلبات تمر عبر هذه الدالة فقط،
-   والمفتاح GEMINI_API_KEY يقرأ حصريًا من أسرار Supabase ولا يُرسل للمتصفح.
+   الوسيط الآمن بين Study OS و APMix API.
+   المتصفح لا يخاطب APMix أبدًا — كل الطلبات تمر عبر هذه الدالة فقط،
+   والمفتاح APMIX_API_KEY يقرأ حصريًا من أسرار Supabase ولا يُرسل للمتصفح.
 
    ── المعمارية ──────────────────────────────────────────────────────
    Browser → supabase.functions.invoke("ai-assistant", {...})
-          → هذه الدالة تتحقق من JWT ثم تخاطب Gemini
+          → هذه الدالة تتحقق من JWT ثم تخاطب APMix
           → تعيد الرد (أو رسالة خطأ عربية) إلى المتصفح.
 
    ── الأمان ─────────────────────────────────────────────────────────
-   • تُرفض الطلبات غير الموثَّقة فورًا (401) دون أي اتصال بـ Gemini.
+   • تُرفض الطلبات غير الموثَّقة فورًا (401) دون أي اتصال بـ APMix.
    • هوية المستخدم تُستخرج من JWT وليس من أي قيمة يرسلها المتصفح.
-   • النموذج ليس قابلًا للضبط من المتصفح — يُغيّر من المتغير GEMINI_MODEL هنا.
+   • النموذج ليس قابلًا للضبط من المتصفح — يُغيّر من المتغير APMIX_MODEL هنا.
    • لا تُطبع قيمة المفتاح أبدًا في logs. health يعرض hasKey فقط (boolean).
+   • لا تُخزن المحادثات — الذاكرة قصيرة الأجل فقط داخل الطلب الواحد.
 
    ── النشر (مرة واحدة) ──────────────────────────────────────────────
    ثبّت Supabase CLI ثم:
      supabase login
      supabase link --project-ref <YOUR-PROJECT-REF>
-     supabase secrets set GEMINI_API_KEY="<google-ai-studio-key>"
+     supabase secrets set APMIX_API_KEY="<apmix-key>"
      supabase functions deploy ai-assistant
    (verify_jwt افتراضي مفعّل — وهذا المطلوب هنا.)
    فحص سريع بعد النشر:
@@ -28,10 +29,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 /* ── النموذج: غيّره من هنا فقط (ثابت — لا يُضبط من المتصفح أبدًا) ── */
-const GEMINI_MODEL = "gemini-3.7-flash";
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent";
+const APMIX_MODEL = "gpt-4o-mini";
+const APMIX_URL = "https://api.apmix.ai/v1/chat/completions";
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
+const APMIX_API_KEY = Deno.env.get("APMIX_API_KEY") || "";
 
 const MODES = ["chat", "explain_question", "quiz", "study_plan", "progress_analysis", "error_bank_help"];
 
@@ -41,7 +42,7 @@ const MAX_CONTEXT_CHARS = 7000;      // أقصى حجم لسياق Study OS ال
 const MAX_HISTORY_TURNS = 12;        // عدد محادثات السابقة التي نرسلها
 const MAX_HISTORY_MSG_CHARS = 1600;  // قصّ كل رسالة سابقة
 const MAX_OUTPUT_TOKENS = 1600;      // أقصى طول للرد
-const GEMINI_TIMEOUT_MS = 55000;     // مهلة اتصال Gemini
+const APMIX_TIMEOUT_MS = 20000;      // مهلة اتصال APMix — 20 ثانية
 const REQ_LIMIT = 20;                // أقصى طلبات لكل مستخدم
 const REQ_WINDOW_MS = 60000;         // خلال هذه النافذة الزمنية
 
@@ -134,17 +135,26 @@ function toContents(body: any): { role: string; parts: { text: string }[] }[] {
   return contents;
 }
 
-/* ── استدعاء Gemini ── */
-async function callGemini(prompt: string, contents: { role: string; parts: { text: string }[] }[]) {
-  const res = await fetch(GEMINI_URL + "?key=" + encodeURIComponent(GEMINI_API_KEY), {
+/* ── استدعاء APMix (OpenAI-compatible) ── */
+async function callAPMix(prompt: string, contents: { role: string; parts: { text: string }[] }[]) {
+  const messages = [
+    { role: "system", content: prompt },
+    ...contents.map(c => ({ role: c.role === "model" ? "assistant" : "user", content: c.parts[0]?.text || "" }))
+  ];
+
+  const res = await fetch(APMIX_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + APMIX_API_KEY
+    },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: prompt }] },
-      contents,
-      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.5 }
+      model: APMIX_MODEL,
+      messages,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      temperature: 0.5
     }),
-    signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS)
+    signal: AbortSignal.timeout(APMIX_TIMEOUT_MS)
   });
 
   let raw = "";
@@ -159,10 +169,9 @@ async function callGemini(prompt: string, contents: { role: string; parts: { tex
     return { server: res.status };
   }
 
-  const cand = data && data.candidates && data.candidates[0];
-  const parts = (cand && cand.content && cand.content.parts) || [];
-  const text = parts.map((p: any) => (p && typeof p.text === "string" ? p.text : "")).join("\n").trim();
-  if (!text) return { empty: true, reason: cand && cand.finishReason || null };
+  const choice = data && data.choices && data.choices[0];
+  const text = (choice && choice.message && choice.message.content) || "";
+  if (!text) return { empty: true, reason: choice && choice.finish_reason || null };
   return { text };
 }
 
@@ -173,8 +182,8 @@ Deno.serve(async (req: Request) => {
   if (req.method === "GET" && url.searchParams.get("action") === "health") {
     return json({
       ok: true,
-      model: GEMINI_MODEL,
-      hasKey: !!GEMINI_API_KEY,
+      model: APMIX_MODEL,
+      hasKey: !!APMIX_API_KEY,
       serverTime: new Date().toISOString()
     });
   }
@@ -210,34 +219,46 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, code: "rate-limit", error: "وصل المساعد إلى حد الاستخدام المؤقت. حاول مرة أخرى بعد قليل." }, 429);
   }
 
-  /* 4) التحقق من المفتاح قبل الاتصال بـ Gemini */
-  if (!GEMINI_API_KEY) {
-    console.error("AI: GEMINI_API_KEY missing in Edge Function secrets (no key value logged).");
+  /* 4) التحقق من المفتاح قبل الاتصال بـ APMix */
+  if (!APMIX_API_KEY) {
+    console.error("AI: APMIX_API_KEY missing in Edge Function secrets (no key value logged).");
     return json({ ok: false, code: "missing-key", error: "المساعد غير مكوّن حاليًا — جرّب بعد قليل." }, 502);
   }
 
-  /* 5) استدعاء Gemini */
+  /* 5) استدعاء APMix */
+  const t0 = Date.now();
+  console.log("AI: apmix request start", JSON.stringify({ model: APMIX_MODEL, timeoutMs: APMIX_TIMEOUT_MS, mode }));
   let result: any;
   try {
-    result = await callGemini(systemPrompt(mode) + "\nسياق Study OS (استخدمه فقط):\n" + contextStr +
+    result = await callAPMix(systemPrompt(mode) + "\nسياق Study OS (استخدمه فقط):\n" + contextStr +
       "\n—————\n", toContents(body));
+    console.log("AI: apmix response received", JSON.stringify({
+      ms: Date.now() - t0,
+      kind: result.text ? "ok" : result.rate ? "rate-limit" : result.config ? "config"
+        : (result.empty || result.timeout) ? "empty-or-timeout" : "server-error"
+    }));
   } catch (e: any) {
-    console.error("AI: gemini call threw", (e && e.name) || "error"); // دون تسجيل المفتاح
+    const name = (e && e.name) || "error";
+    console.error("AI: apmix request failed", JSON.stringify({ ms: Date.now() - t0, errorType: name }));
+    if (name === "TimeoutError" || name === "AbortError") {
+      return json({ ok: false, code: "APMIX_TIMEOUT", error: "المساعد الذكي استغرق وقتًا أطول من المتوقع. حاول مرة أخرى." }, 504);
+    }
     return json({ ok: false, code: "server", error: "حدث خطأ مؤقت في المساعد. حاول مرة أخرى." }, 502);
   }
 
   if (result.text) {
-    return json({ ok: true, reply: result.text, model: GEMINI_MODEL });
+    return json({ ok: true, reply: result.text, model: APMIX_MODEL });
   }
   if (result.rate) {
     return json({ ok: false, code: "rate-limit", error: "وصل المساعد إلى حد الاستخدام المؤقت. حاول مرة أخرى بعد قليل." }, 429);
   }
   if (result.config) {
-    console.error("AI: gemini rejected the request (status " + result.config + ") - check GEMINI_API_KEY validity.");
+    console.error("AI: apmix rejected the request (status " + result.config + ") - check APMIX_API_KEY validity and generationConfig.");
     return json({ ok: false, code: "server", error: "حدث خطأ مؤقت في المساعد. حاول مرة أخرى." }, 502);
   }
   if (result.empty || result.timeout) {
-    return json({ ok: false, code: "timeout", error: "استغرق المساعد وقتًا أطول من المتوقع — حاول مرة أخرى." }, 504);
+    console.error("AI: apmix did not return in time", JSON.stringify({ ms: Date.now() - t0 }));
+    return json({ ok: false, code: "APMIX_TIMEOUT", error: "المساعد الذكي استغرق وقتًا أطول من المتوقع. حاول مرة أخرى." }, 504);
   }
   return json({ ok: false, code: "server", error: "حدث خطأ مؤقت في المساعد. حاول مرة أخرى." }, 502);
 });

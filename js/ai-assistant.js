@@ -22,11 +22,13 @@ App.Assistant = (function () {
   const $ = id => document.getElementById(id);
 
   /* ── حالة في الذاكرة فقط ── */
-  let msgs = [];            // [{ id, role: "user"|"ai", text, mode, error?, typing?, tag? }]
+  let msgs = [];            // [{ id, role: "user"|"ai", text, mode, error?, typing?, retry?, code?, tag?, t }]
   let mode = "chat";        // الوضع النشط (يبقى لأحاديث المتابعة)
   let sending = false;
   let pendingMistakeId = null;  // خطأ منتقى من بنك الأخطاء
   let pendingAuto = null;       // إرسال تلقائي عند فتح الصفحة من رابط خارجي
+  let signedIn = false;         // آخر حالة مصادقة معروفة (تُستخدم للإشعارات فقط)
+  let stickBottom = true;       // تمرير تلقائي حتى الأسفل ما لم يصعد المستخدم
 
   const MAX_CHARS = 4000;
   const EDGE_FN = "ai-assistant";
@@ -47,7 +49,17 @@ App.Assistant = (function () {
     progress_analysis: "حلّل مستواي في الدراسة من بياناتي.",
     study_plan: "ساعدني أضع خطة مذاكرة واضحة."
   };
+  const QUICK_CARDS = [
+    { m: "explain_question", ic: "📚", t: "اشرح لي سؤالًا", d: "افهم السؤال خطوة بخطوة" },
+    { m: "quiz", ic: "🧠", t: "اختبرني", d: "اختبر معلوماتي بطريقة ذكية" },
+    { m: "progress_analysis", ic: "📊", t: "حلل مستواي", d: "اعرف نقاط القوة والضعف" },
+    { m: "study_plan", ic: "📅", t: "ساعدني في خطة مذاكرة", d: "أنشئ خطة مناسبة لوقتي وأهدافي" }
+  ];
   const SEND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+  const COPY_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const CHECK_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  const WIFI_OFF_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 13.4A13.9 13.9 0 0 0 6 9.6"/><path d="M16.2 16.4a8 8 0 0 0-8.4-1.1"/><path d="M12 20h.01"/><path d="M2 2l20 20"/></svg>';
+  const AI_LOGO_SRC = "img/ai-logo.png";
 
   /* ── سياق Study OS: يُبنى فقط عند الضغط على إرسال، حسب الوضع ── */
   function mistakeNugget(m){
@@ -220,7 +232,7 @@ App.Assistant = (function () {
 
   function retryable(status, code){
     if (status === 0) return true;                  // خطأ شبكة/مهلة
-    if (status === 429 || status === 401 || status === 403 || status === 400) return false;
+    if (status === 429 || status === 401 || status === 403 || status === 400 || code === "GEMINI_TIMEOUT") return false;
     if (status >= 500) return true;
     return code === "server" || code === "timeout";
   }
@@ -229,7 +241,7 @@ App.Assistant = (function () {
     if (code === "auth" || status === 401 || status === 403) return "سجل الدخول لاستخدام المساعد الذكي.";
     if (code === "rate-limit" || status === 429) return "وصل المساعد إلى حد الاستخدام المؤقت. حاول مرة أخرى بعد قليل.";
     if (code === "missing-key") return "المساعد غير مكوّن حاليًا — جرّب بعد قليل.";
-    if (code === "timeout" || status === 504) return "استغرق المساعد وقتًا أطول من المتوقع — حاول مرة أخرى.";
+    if (code === "GEMINI_TIMEOUT" || code === "timeout" || status === 504) return "المساعد الذكي استغرق وقتًا أطول من المتوقع. حاول مرة أخرى.";
     if (status >= 500 || status === 0) return "تعذر الاتصال بالمساعد حاليًا.";
     return "حدث خطأ في المساعد — حاول مرة أخرى.";
   }
@@ -258,16 +270,21 @@ App.Assistant = (function () {
 
     sending = true;
     setSendingUI(true);
+    stickBottom = true;
     pushUser(msg, md);
     const pendingId = pushAI("", { typing: true });
 
     let s;
     try { s = await App.Sync.getSession(); } catch (_e){ s = { ok: false }; }
     if (!s || !s.ok || !s.session){
-      patchAI(pendingId, "سجل الدخول لاستخدام المساعد الذكي.", { error: true });
+      signedIn = false;
+      applyShellState();
+      patchAI(pendingId, "سجل الدخول لاستخدام المساعد الذكي.", { error: true, code: "auth" });
       endSend();
       return;
     }
+    signedIn = true;
+    applyShellState();
 
     mode = md; // المتابعات تستمر بنفس الوضع (الاختبار مثلًا) حتى يغيّر المستخدم
     const payload = {
@@ -287,7 +304,7 @@ App.Assistant = (function () {
     if (out.ok){
       patchAI(pendingId, out.reply, {});
     } else {
-      patchAI(pendingId, out.msg || userError(out.status, out.code), { error: true, retry: !!(out.again) });
+      patchAI(pendingId, out.msg || userError(out.status, out.code), { error: true, retry: !!(out.again), code: out.code });
     }
     endSend();
   }
@@ -313,7 +330,7 @@ App.Assistant = (function () {
   let seq = 0;
   function pushUser(text, md){
     const id = "u" + (++seq);
-    const x = { id, role: "user", text, mode: md, tag: MODE_LABEL[md] || "" };
+    const x = { id, role: "user", text, mode: md, tag: MODE_LABEL[md] || "", t: Date.now() };
     msgs.push(x);
     paint();
     return id;
@@ -321,7 +338,7 @@ App.Assistant = (function () {
   function pushAI(text, o){
     o = o || {};
     const id = "a" + (++seq);
-    msgs.push({ id, role: "ai", text, typing: !!o.typing, error: !!o.error, retry: !!o.retry });
+    msgs.push({ id, role: "ai", text, typing: !!o.typing, error: !!o.error, retry: !!o.retry, code: o.code || "", t: Date.now() });
     paint();
     return id;
   }
@@ -333,6 +350,7 @@ App.Assistant = (function () {
     x.typing = false;
     x.error = !!o.error;
     x.retry = !!o.retry;
+    x.code = o.code || "";
     paint();
   }
 
@@ -347,49 +365,145 @@ App.Assistant = (function () {
     return U.esc(String(t)).replace(/\n/g, "<br>");
   }
 
+  /* عرض Markdown آمن: كل النص يُهرب قبل أي تحويل، ولا يُدخل أي HTML من المصدر. */
+  function inlineMD(s){
+    s = s.replace(/`([^`\n]+)`/g, (m, c) => '<code class="ai-c">' + c + '</code>');
+    s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*([^*]|$)/g, '$1<em>$2</em>$3');
+    s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    return s;
+  }
+
+  function renderMD(text){
+    text = String(text || "");
+    const blocks = [];
+    text = text.replace(/```[a-z]*\n?([\s\S]*?)```/g, (m, code) => {
+      blocks.push('<pre><code>' + U.esc(code) + '</code></pre>');
+      return "\u0000BLK" + (blocks.length - 1) + "\u0000";
+    });
+    const out = [];
+    text.split(/\n\s*\n/).forEach(seg0 => {
+      if (!seg0.trim()) return;
+      const bm = seg0.match(/^\u0000BLK(\d+)\u0000$/);
+      if (bm){ out.push(blocks[+bm[1]]); return; }
+      seg0 = inlineMD(U.esc(seg0));
+      const lines = seg0.split("\n").map(l => l.trim()).filter(Boolean);
+      if (!lines.length) return;
+      if (lines.every(l => /^&gt;/.test(l))){
+        out.push('<blockquote>' + lines.map(l => l.replace(/^&gt;\s?/, "")).join('<br>') + '</blockquote>');
+        return;
+      }
+      const h = lines[0].match(/^(#{1,3})\s+(.*)$/);
+      if (h){ out.push('<h' + (h[1].length + 1) + '>' + h[2] + '</h' + (h[1].length + 1) + '>'); return; }
+      let html = "", openU = false, openO = false, any = false;
+      lines.forEach(l => {
+        const um = l.match(/^[-*]\s+(.*)$/);
+        const om = l.match(/^\d+[.)]\s+(.*)$/);
+        if (um){
+          if (openO){ html += '</ol>'; openO = false; }
+          if (!openU){ html += '<ul>'; openU = true; }
+          html += '<li>' + um[1] + '</li>'; any = true; return;
+        }
+        if (om){
+          if (openU){ html += '</ul>'; openU = false; }
+          if (!openO){ html += '<ol>'; openO = true; }
+          html += '<li>' + om[1] + '</li>'; any = true; return;
+        }
+        if (openU){ html += '</ul>'; openU = false; }
+        if (openO){ html += '</ol>'; openO = false; }
+        if (/^-{3,}$/.test(l)){ html += '<hr>'; any = true; return; }
+        html += '<p>' + l + '</p>'; any = true;
+      });
+      if (openU) html += '</ul>';
+      if (openO) html += '</ol>';
+      if (any && html) out.push(html);
+    });
+    return out.join("");
+  }
+
+  function avatarGlyph(){
+    const a = (S.getState().user && S.getState().user.avatar) || "🙂";
+    if (a.indexOf("data:image") === 0 || a.indexOf("http") === 0){
+      return '<img class="av-img" src="' + a + '" alt="">';
+    }
+    return '<span>' + a + '</span>';
+  }
+
   function bubbleHTML(x){
     const role = x.role === "user" ? "user" : "ai";
     const cls = "ai-msg " + role + (x.error ? " err" : "") + (x.typing ? " thinking" : "");
     const av = role === "ai"
-      ? '<span class="ai-av">' + I.get("robot", 17) + '</span>'
-      : '<span class="ai-av">' + (S.getState().user.avatar || "🙂") + '</span>';
-    const body = x.typing
-      ? '<span class="t i1"></span><span class="t i2"></span><span class="t i3"></span>'
-      : escText(x.text);
-    const tag = x.tag && role === "user" ? '<div class="ai-tag">' + U.esc(x.tag) + '</div>' : "";
-    const retry = x.error && x.retry ? '<button class="btn sm ghost ai-retry" data-ai="retry">' + I.get("refresh", 13) + 'إعادة المحاولة</button>' : "";
-    return '<div class="' + cls + '" data-id="' + x.id + '">' + av + '<div class="ai-bubble">' + tag + body + retry + '</div></div>';
+      ? '<span class="ai-av"><img class="ai-logo-img" src="' + AI_LOGO_SRC + '" alt="" decoding="async"></span>'
+      : '<span class="ai-av">' + avatarGlyph() + '</span>';
+    let body;
+    if (x.typing){
+      body = '<span class="ai-think-txt">جاري التفكير</span><span class="t i1"></span><span class="t i2"></span><span class="t i3"></span>';
+    } else if (x.error){
+      body = '<div class="ai-md"><p>' + escText(x.text) + '</p></div>';
+    } else if (role === "ai"){
+      body = '<div class="ai-md">' + renderMD(x.text) + '</div>';
+    } else {
+      body = '<div class="ai-md"><p>' + escText(x.text) + '</p></div>';
+    }
+    const time = x.t ? '<span class="ai-time num">' + U.fmtTimeHM(new Date(x.t)) + '</span>' : "";
+    const meta = '<div class="ai-meta"><span class="ai-role">' + (role === "ai" ? "مساعد Study OS" : "أنت") + '</span>' + time + '</div>';
+    const tag = x.tag && role === "user" ? '<span class="ai-tag">' + U.esc(x.tag) + '</span>' : "";
+    let actions = "";
+    if (role === "ai" && !x.typing && !x.error){
+      actions = '<div class="ai-actions"><button class="ai-act ai-copy" data-ai="copy" data-copy="' + x.id + '" aria-label="نسخ الرد">' + COPY_ICON + '<span>نسخ</span></button></div>';
+    } else if (x.error && x.retry){
+      actions = '<div class="ai-actions"><button class="ai-act ai-retry" data-ai="retry" aria-label="إعادة المحاولة">' + I.get("refresh", 12) + '<span>إعادة المحاولة</span></button></div>';
+    } else if (x.error && x.code === "auth"){
+      actions = '<div class="ai-actions"><button class="ai-act ai-login danger" data-ai="login" aria-label="تسجيل الدخول">' + I.get("user", 12) + '<span>تسجيل الدخول</span></button></div>';
+    }
+    return '<div class="' + cls + '" data-id="' + x.id + '">' + av + '<div class="ai-bubble">' + meta + tag + body + actions + '</div></div>';
   }
 
   function welcome(){
     return '<div class="ai-welcome">' +
-      '<div class="ai-logo">' + I.get("robot", 46) + '</div>' +
-      '<h2 class="ai-w-title">مساعد Study OS</h2>' +
-      '<p class="ai-w-name">مساعدك الذكي للمذاكرة</p>' +
-      '<p class="ai-w-sub">اسألني عن دروسك، أخطائك، خطتك الدراسية أو تقدمك.</p>' +
-      '<div class="ai-quick">' +
-        '<button class="quick" data-ai="qa" data-mode="explain_question">📚 اشرح لي سؤالًا</button>' +
-        '<button class="quick" data-ai="qa" data-mode="quiz">🧠 اختبرني</button>' +
-        '<button class="quick" data-ai="qa" data-mode="progress_analysis">📊 حلل مستواي</button>' +
-        '<button class="quick" data-ai="qa" data-mode="study_plan">📅 ساعدني في خطة مذاكرة</button>' +
+      '<div class="ai-logo"><img class="ai-logo-img" src="' + AI_LOGO_SRC + '" alt="المساعد الذكي" decoding="async"><span class="ai-spark">' + I.get("star", 13) + '</span></div>' +
+      '<h2 class="ai-w-title">أهلاً بك 👋</h2>' +
+      '<p class="ai-w-hello">أنا مساعد Study OS</p>' +
+      '<p class="ai-w-sub">اسألني عن دراستك، اشرح لي سؤالًا، اختبرني، أو ساعدني في تنظيم مذاكرتك.</p>' +
+      '<div class="ai-quick">' + QUICK_CARDS.map(q =>
+        '<button class="quick" data-ai="qa" data-mode="' + q.m + '">' +
+          '<span class="q-ic" aria-hidden="true">' + q.ic + '</span>' +
+          '<span class="q-txt"><b>' + q.t + '</b><small>' + q.d + '</small></span>' +
+        '</button>').join("") +
       '</div>' +
     '</div>';
   }
 
+  function headerHTML(){
+    return '<header class="ai-header">' +
+      '<div class="ai-head-brand">' +
+        '<span class="ai-head-ic"><img class="ai-logo-img" src="' + AI_LOGO_SRC + '" alt="" decoding="async"></span>' +
+        '<div class="ai-head-txt">' +
+          '<div class="page-title">المساعد الذكي</div>' +
+          '<div class="ai-head-sub">Study OS AI</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ai-head-side">' +
+        '<span class="ai-status" id="ai-status"><i class="ai-status-dot" aria-hidden="true"></i><span id="ai-status-txt">جاهز للمساعدة</span></span>' +
+        '<button class="btn glass sm ai-clear" data-ai="clear" id="ai-clear" aria-label="بدء محادثة جديدة">' + I.get("plus", 14) + '<span>محادثة جديدة</span></button>' +
+      '</div>' +
+    '</header>';
+  }
+
   function paint(){
-    const chat = $("ai-chat");
-    if (!chat) return;
-    const clr = document.querySelector("[data-ai='clear']");
+    const chat = $("ai-chat"), inner = $("ai-chat-in");
+    if (!chat || !inner) return;
+    const clr = $("ai-clear");
+    if (clr) clr.hidden = !msgs.length;
     if (!msgs.length){
-      chat.innerHTML = welcome();
-      const qa = $("ai-modebar");
-      if (qa) qa.hidden = true;
-      if (clr) clr.style.display = "none";
-      return;
+      inner.className = "ai-chat-in centered";
+      inner.innerHTML = welcome();
+    } else {
+      inner.className = "ai-chat-in";
+      inner.innerHTML = msgs.map(bubbleHTML).join("");
     }
-    chat.innerHTML = msgs.map(bubbleHTML).join("");
-    chat.scrollTop = chat.scrollHeight;
-    if (clr) clr.style.display = "";
+    if (stickBottom && msgs.length) requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
+    else if (!msgs.length) chat.scrollTop = 0;
     const modebar = $("ai-modebar");
     if (modebar){
       const chip = modebar.querySelector(".ai-mode-chip");
@@ -400,16 +514,24 @@ App.Assistant = (function () {
 
   function setSendingUI(on){
     const btn = $("ai-send");
-    const bar = document.querySelector(".ai-inputbar");
-    if (btn) btn.disabled = on;
-    if (bar) bar.classList.toggle("busy", on);
+    const input = $("ai-input");
+    const box = $("ai-inputbox");
+    if (btn){
+      btn.disabled = on;
+      btn.setAttribute("aria-busy", on ? "true" : "false");
+      btn.innerHTML = on ? '<span class="ai-send-load" aria-hidden="true"><i></i><i></i><i></i></span>' : SEND_ICON;
+    }
+    if (input) input.readOnly = on;
+    if (box) box.classList.toggle("busy", on);
   }
 
   function autosize(){
     const el = $("ai-input");
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 150) + "px";
+    el.style.height = Math.min(el.scrollHeight + 2, 190) + "px";
+    const btn = $("ai-send");
+    if (btn) btn.classList.toggle("off", !el.value.trim());
   }
 
   function resetAll(){
@@ -417,17 +539,70 @@ App.Assistant = (function () {
     mode = "chat";
     pendingMistakeId = null;
     pendingAuto = null;
+    stickBottom = true;
     const input = $("ai-input");
-    if (input) input.value = "";
+    if (input){ input.value = ""; autosize(); }
     paint();
+    refreshGate();
     if (input) input.focus();
+  }
+
+  /* ── حالات الصفحة: تسجيل الدخول والاتصال ── */
+  async function refreshGate(){
+    let ok = false;
+    try { const s = await App.Sync.getSession(); ok = !!(s && s.ok && s.session); } catch (_e){ ok = false; }
+    signedIn = ok;
+    applyShellState();
+  }
+
+  function applyShellState(){
+    const on = (typeof navigator !== "undefined") ? navigator.onLine : true;
+    const status = $("ai-status"), txt = $("ai-status-txt");
+    if (status) status.classList.toggle("off", !on);
+    if (txt) txt.textContent = on ? "جاهز للمساعدة" : "غير متصل";
+    const notice = $("ai-notice");
+    if (!notice) return;
+    if (!on){
+      notice.className = "ai-notice show offline";
+      notice.innerHTML = WIFI_OFF_ICON + '<span>المساعد الذكي يحتاج إلى اتصال بالإنترنت.</span>';
+    } else if (!signedIn){
+      notice.className = "ai-notice show warn";
+      notice.innerHTML = '<span>سجل الدخول لاستخدام المساعد الذكي.</span>' +
+        '<button class="ai-act ai-login danger" data-ai="login" aria-label="تسجيل الدخول">' + I.get("user", 12) + '<span>تسجيل الدخول</span></button>';
+    } else {
+      notice.className = "ai-notice";
+      notice.innerHTML = "";
+    }
+  }
+
+  function doLogin(){
+    if (!App.Sync || !App.Sync.signIn){
+      UI.toast("طبقة السحابة غير محمّلة — تحقق من الاتصال.", "error", "info");
+      return;
+    }
+    Promise.resolve(App.Sync.signIn()).then(res => {
+      if (res && res.error) UI.toast("تعذر فتح تسجيل الدخول — حاول مرة أخرى.", "error", "info");
+    }).catch(() => {});
+  }
+
+  async function copyMessage(id, btn){
+    const x = msgs.find(m => m.id === id);
+    if (!x || !x.text) return;
+    let okc = false;
+    try { await navigator.clipboard.writeText(x.text); okc = true; } catch (_e){ okc = false; }
+    btn.innerHTML = okc ? CHECK_ICON + '<span>تم النسخ</span>' : COPY_ICON + '<span>نسخ</span>';
+    btn.classList.toggle("done", okc);
+    setTimeout(() => {
+      btn.classList.remove("done");
+      btn.innerHTML = COPY_ICON + '<span>نسخ</span>';
+    }, 1500);
   }
 
   /* ── الربط ── */
   function bind(root){
     const sendBtn = $("ai-send");
     const input = $("ai-input");
-    if (sendBtn) sendBtn.addEventListener("click", () => { const v = input ? input.value : ""; input.value = ""; autosize(); send(v, mode); });
+    if (sendBtn) sendBtn.addEventListener("click", () => { const v = input ? input.value : ""; if (input){ input.value = ""; autosize(); } send(v, mode); });
     if (input){
       input.addEventListener("keydown", e => {
         if (e.key === "Enter" && !e.shiftKey){
@@ -442,8 +617,11 @@ App.Assistant = (function () {
       input.addEventListener("input", autosize);
     }
     const chat = $("ai-chat");
-    /* تفويض: أزرار الترحيب السريعة وإعادة المحاولة تُعاد لصقها في كل paint،
-       فندير نقراتها على مستوى حاوية المحادثة الثابتة بدل ربطها بأزرار مؤقتة. */
+    /* تمرير ذكي: نلتصق بالأسفل إلا إذا صعد المستخدم */
+    if (chat) chat.addEventListener("scroll", () => {
+      stickBottom = (chat.scrollHeight - chat.scrollTop - chat.clientHeight) < 120;
+    }, { passive: true });
+    /* تفويض: الأزرار الداخلية تُعاد لصقها في كل paint، فنفوض النقرات على الحاوية الثابتة. */
     if (chat){
       chat.addEventListener("click", e => {
         const q = e.target.closest("[data-ai='qa']");
@@ -458,7 +636,21 @@ App.Assistant = (function () {
         if (rt){
           const last = lastUserMsg();
           if (last) send(last.text, last.mode || "chat");
+          return;
         }
+        const cp = e.target.closest("[data-ai='copy']");
+        if (cp){
+          copyMessage(cp.getAttribute("data-copy"), cp);
+          return;
+        }
+        const lg = e.target.closest("[data-ai='login']");
+        if (lg){ doLogin(); return; }
+      });
+    }
+    const notice = $("ai-notice");
+    if (notice){
+      notice.addEventListener("click", e => {
+        if (e.target.closest("[data-ai='login']")) doLogin();
       });
     }
     root.querySelectorAll("[data-ai='clear']").forEach(b => b.addEventListener("click", resetAll));
@@ -473,36 +665,33 @@ App.Assistant = (function () {
     }
     document.body.classList.add("ai-route");
     root.innerHTML =
-      '<div class="page-head">' +
-        '<div><div class="page-title">المساعد الذكي</div>' +
-        '<div class="page-sub">Gemini عبر Study OS — اشرح، اختبر، حلّل، ونظّم خطتك.</div></div>' +
-        '<div class="head-actions">' +
-          '<button class="btn glass sm" data-ai="clear" style="' + (msgs.length ? "" : "display:none") + '">' + I.get("reset", 14) + 'محادثة جديدة</button>' +
-        '</div>' +
-      '</div>' +
       '<div class="ai-page">' +
-        '<div class="ai-chat" id="ai-chat" role="log" aria-live="polite"></div>' +
+        headerHTML() +
+        '<div class="ai-body">' +
+          '<div class="ai-chat" id="ai-chat" role="log" aria-live="polite">' +
+            '<div class="ai-chat-in" id="ai-chat-in"></div>' +
+          '</div>' +
+        '</div>' +
         '<div class="ai-inputbar">' +
           '<div class="ai-modebar" id="ai-modebar" hidden>' +
             '<span class="ai-mode-chip">' + (MODE_LABEL[mode] || mode) + '</span>' +
-            '<button class="ai-mode-clear" data-ai="modechat" title="العودة لمحادثة عادية">' + I.get("close", 12) + '</button>' +
+            '<button class="ai-mode-clear" data-ai="modechat" title="العودة لمحادثة عادية" aria-label="العودة لمحادثة عادية">' + I.get("close", 12) + '</button>' +
           '</div>' +
-          '<div class="ai-input">' +
-            '<textarea id="ai-input" class="input ai-input-ta" rows="1" placeholder="اكتب سؤالك للمساعد..." enterkeyhint="send" autocomplete="off"></textarea>' +
-            '<button class="btn primary ai-send" id="ai-send" aria-label="إرسال">' + SEND_ICON + '</button>' +
+          '<div class="ai-notice" id="ai-notice" role="status" aria-live="polite"></div>' +
+          '<div class="ai-input" id="ai-inputbox">' +
+            '<textarea id="ai-input" class="ai-input-ta" rows="1" placeholder="اكتب سؤالك للمساعد..." enterkeyhint="send" autocomplete="off" aria-label="رسالتك للمساعد"></textarea>' +
+            '<button class="ai-send" id="ai-send" aria-label="إرسال" title="إرسال">' + SEND_ICON + '</button>' +
           '</div>' +
+          '<div class="ai-hint"><span><span class="k">Enter</span> للإرسال · <span class="k">Shift+Enter</span> لسطر جديد</span><span class="ai-hint-sub">مساعد مدعوم بالذكاء الاصطناعي — قد يرتكب أخطاء، تأكد من المعلومات المهمة</span></div>' +
         '</div>' +
       '</div>';
 
     paint();
-    const clear = root.querySelector("[data-ai='clear']");
-    if (clear) clear.style.display = msgs.length ? "" : "none";
+    applyShellState();
+    refreshGate();
     const input = $("ai-input");
-    if (input) setTimeout(() => input.focus(), 120);
+    if (input){ autosize(); setTimeout(() => input.focus(), 120); }
 
-    root.querySelectorAll("[data-ai='modechat']").forEach(b => {
-      b.addEventListener("click", () => { mode = "chat"; pendingMistakeId = null; });
-    });
     bind(root);
     if (pendingAuto){
       const auto = pendingAuto;
@@ -517,6 +706,9 @@ App.Assistant = (function () {
     pendingAuto = { m: "error_bank_help", text: "اشرح لي هذا الخطأ من بنك أخطائي وساعدني أفهمه ولا تكتفِ بالإجابة — اشرح السبب." };
     App.Router.go("ai-assistant", { mistake: id });
   }
+
+  window.addEventListener("online", applyShellState);
+  window.addEventListener("offline", applyShellState);
 
   App.Views.register("ai-assistant", render, { rerender: false, title: "المساعد الذكي" });
 

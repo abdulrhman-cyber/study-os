@@ -1,4 +1,4 @@
-﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    STUDY OS â€” Premium Glassy Emerald + Champagne Gold
    Design system reconstructed from the authoritative reference
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
@@ -1304,58 +1304,330 @@ html[data-theme="light"] .toast{background:rgba(255,255,255,.92);border-color:rg
 .plan-card .plan-sched{display:flex;flex-direction:column;gap:5px;max-height:260px;overflow:auto;margin-top:4px}
 
 /* ═══════════════════ AI ASSISTANT — صفحة المساعد الذكي ═══════════════════
-   تصميم متوافق مع هوية Study OS (نفس الزوايا/الظلال/الألوان/البطاقات).
-   عند تفعيل هذا المسار يُقفل تمرير واجهة الصفحة ويُمرَّر سجلّ المحادثة وحده،
-   فيبقى حقل الإدخال مثبّتًا أسفل الشاشة دائمًا (دون تجاوز للشاشات الضيقة). */
+   تصميم على طراز ChatGPT الحديث: عمود محادثة واحد مركزي (بدون بطاقات/فقاعات
+   ثقيلة)، ردود المساعد نصّ مفتوح بأفاتار صغير، رسالة المستخدم حبة مدمجة،
+   شاشة ترحيب في منتصف المساحة، وComposer ثابت أسفل الصفحة.
+   عند تفعيل المسار يُقفل تمرير الواجهة ويُمرَّر السجلّ وحده — الرأس
+   والـ Composer ثابتان. كل الألوان والزوايا والمسافات من Design System. */
 body.ai-route .main{overflow:hidden}
 body.ai-route .content{height:100%;min-height:0;padding-bottom:0;gap:0}
 body.ai-route .view{height:100%;min-height:0;display:flex;flex-direction:column}
 body.ai-route #fab-wrap{display:none}
 
-.ai-page{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}
-.ai-chat{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:12px;padding:2px 2px 10px;scroll-behavior:smooth;overscroll-behavior:contain}
+.ai-page{flex:1;min-height:0;display:flex;flex-direction:column;gap:0}
+
+/* ── 1) رأس الصفحة: شريط بسيط 60px ── */
+.ai-header{
+  flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  min-height:60px;padding:12px 20px;position:relative;z-index:2;
+  border-bottom:1px solid var(--line);
+}
+.ai-head-brand{display:flex;align-items:center;gap:11px;min-width:0}
+.ai-head-ic{
+  flex:none;width:38px;height:38px;border-radius:var(--r-md);display:grid;place-items:center;
+  color:var(--em-4);background:linear-gradient(160deg,rgba(47,117,104,.26),rgba(47,117,104,.08));
+  border:1px solid rgba(111,169,155,.32);
+  backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);
+}
+.ai-head-ic .ai-logo-img{width:76%;height:76%;border-radius:8px;object-fit:cover}
+.ai-head-txt{display:flex;flex-direction:column;min-width:0;line-height:1.4}
+.ai-head-txt .page-title{font-size:17px;font-weight:900;color:var(--text);letter-spacing:-.2px}
+.ai-head-sub{font-size:11px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai-head-side{display:flex;align-items:center;gap:10px;flex:none}
+.ai-status{
+  display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:800;color:var(--text-3);
+  padding:5px 12px;border-radius:99px;border:1px solid var(--line);background:transparent;white-space:nowrap;
+}
+.ai-status-dot{width:7px;height:7px;border-radius:50%;background:var(--em-3);position:relative}
+.ai-status-dot::after{content:"";position:absolute;inset:-2px;border-radius:50%;border:1.5px solid rgba(111,169,155,.5);animation:ai-ring 2.2s ease-out infinite}
+@keyframes ai-ring{0%{transform:scale(.7);opacity:1}100%{transform:scale(2.1);opacity:0}}
+.ai-status.off .ai-status-dot{background:var(--text-4)}
+.ai-status.off .ai-status-dot::after{animation:none;opacity:0}
+.ai-clear span{display:inline}
+.ai-clear:hover{border-color:rgba(214,183,122,.5)}
+
+/* ── 2) منطقة المحادثة: السجلّ وحده يتمرر ── */
+.ai-body{flex:1;min-height:0;display:flex;position:relative}
+.ai-chat{
+  flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;position:relative;z-index:1;
+  display:flex;flex-direction:column;
+  scroll-behavior:smooth;overscroll-behavior:contain;
+}
 .ai-chat::-webkit-scrollbar{width:6px}
 .ai-chat::-webkit-scrollbar-thumb{background:transparent;border-radius:99px}
-.ai-chat:hover::-webkit-scrollbar-thumb{background:rgba(214,183,122,.4)}
+.ai-chat:hover::-webkit-scrollbar-thumb,.ai-chat:focus-within::-webkit-scrollbar-thumb{background:var(--line-strong)}
+.ai-chat-in{
+  width:100%;max-width:880px;margin-inline:auto;min-width:0;
+  display:flex;flex-direction:column;gap:28px;
+  padding:24px 24px 170px;
+}
+.ai-chat-in.centered{align-items:center;justify-content:flex-start;padding-top:clamp(96px,28vh,254px);padding-bottom:24px}
 
-/* ── رسائل المحادثة ── */
-.ai-msg{display:flex;align-items:flex-start;gap:9px;max-width:min(640px,92%);animation:page-in .3s var(--ease) both}
-.ai-msg.user{align-self:flex-end;flex-direction:row-reverse}
-.ai-av{flex:none;width:32px;height:32px;border-radius:11px;display:grid;place-items:center;font-size:15px;background:var(--surface-2);border:1px solid var(--line-strong);color:var(--gold-2);overflow:hidden}
-.ai-msg.ai .ai-av{color:var(--em-3);background:rgba(47,117,104,.14)}
-.ai-bubble{min-width:0;padding:11px 14px;border-radius:var(--r-lg);font-size:14px;line-height:1.85;background:var(--surface-2);border:1px solid var(--line);color:var(--text-2);word-break:break-word;white-space:normal}
-.ai-msg.user .ai-bubble{background:linear-gradient(160deg,var(--em-1),rgba(47,117,104,.75));border-color:rgba(111,169,155,.35);color:var(--text)}
-.ai-msg.err .ai-bubble{border-color:var(--red-line);background:var(--red-soft);color:var(--text-2)}
-.ai-msg.user.err .ai-bubble{background:var(--red-soft);color:var(--text-2)}
-.ai-tag{display:inline-block;font-size:10px;font-weight:900;color:var(--gold-2);margin-bottom:4px;padding:2px 8px;border-radius:99px;border:1px solid rgba(214,183,122,.25);background:rgba(214,183,122,.08)}
-.ai-retry{margin-top:8px}
+/* ── 3) الرسائل: لا بطاقات ولا فقاعات ثقيلة ── */
+.ai-msg{position:relative;display:flex;align-items:flex-start;gap:10px;min-width:0;animation:ai-msg-in .3s var(--ease) both}
+@keyframes ai-msg-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.ai-msg.user{align-self:flex-start;max-width:min(82%,560px)}
+html[dir="ltr"] .ai-msg.user{align-self:flex-end}
+.ai-msg.ai{align-self:stretch}
+.ai-msg>.ai-av{flex:none;width:26px;height:26px;margin-top:2px;border-radius:var(--r-sm);display:grid;place-items:center;overflow:hidden}
+.ai-msg>.ai-av .ai-logo-img{width:100%;height:100%;object-fit:cover;border-radius:5px}
+.ai-msg>.ai-av img.av-img{width:100%;height:100%;object-fit:cover}
+.ai-msg.user>.ai-av{display:none}
+.ai-msg.ai>.ai-av{color:var(--em-4);background:linear-gradient(160deg,rgba(47,117,104,.22),rgba(47,117,104,.07));border:1px solid rgba(111,169,155,.3)}
 
-/* ── مؤشر "جاري التفكير" ── */
-.ai-msg.thinking .ai-bubble{display:inline-flex;gap:5px;align-items:center;padding:15px 18px}
-.ai-msg.thinking .t{width:7px;height:7px;border-radius:50%;background:var(--em-3);display:inline-block;animation:ai-blink 1.2s var(--ease) infinite}
+.ai-msg .ai-bubble{min-width:0;word-break:break-word;white-space:normal}
+/* رد المساعد: نصّ مفتوح بدون أي خلفية/حدود */
+.ai-msg.ai>.ai-bubble{
+  flex:1;padding:0;background:transparent;border:none;box-shadow:none;
+  font-size:15px;line-height:1.75;color:var(--text);
+}
+/* رسالة المستخدم: حبة مدمجة هادئة */
+.ai-msg.user>.ai-bubble{
+  padding:9px 15px 10px;font-size:14.5px;line-height:1.7;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--line-strong);
+  border-radius:var(--r-md) var(--r-md) var(--r-sm) var(--r-md);
+}
+.ai-msg.err>.ai-bubble{
+  background:var(--red-soft);border:1px solid var(--red-line);color:var(--text-2);
+  box-shadow:none;border-radius:var(--r-lg);padding:11px 14px;
+}
+.ai-msg.user.err>.ai-bubble{border-radius:var(--r-md) var(--r-md) var(--r-sm) var(--r-md)}
+.ai-msg.thinking>.ai-bubble{
+  display:inline-flex;align-items:center;gap:9px;padding:4px 2px;
+  background:transparent;border:none;border-radius:0;box-shadow:none;
+}
+.ai-think-txt{font-size:12.5px;font-weight:800;color:var(--text-3)}
+.ai-msg.thinking .t{width:6px;height:6px;border-radius:50%;background:var(--em-3);display:inline-block;animation:ai-blink 1.2s var(--ease) infinite}
 .ai-msg.thinking .t.i2{animation-delay:.2s}
 .ai-msg.thinking .t.i3{animation-delay:.4s}
-@keyframes ai-blink{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+@keyframes ai-blink{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}}
+.ai-msg.ai + .ai-msg.user{margin-top:10px}
 
-/* ── شاشة الترحيب ── */
-.ai-welcome{margin:auto;max-width:560px;width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px;padding:24px 10px 40px}
-.ai-logo{width:86px;height:86px;border-radius:26px;display:grid;place-items:center;background:linear-gradient(160deg,var(--em-1),var(--em-3));color:#fff;border:1px solid rgba(232,207,152,.35);box-shadow:0 18px 40px -14px rgba(47,117,104,.7);margin-bottom:10px}
-.ai-w-title{font-size:24px;font-weight:900;letter-spacing:-.2px;background:linear-gradient(120deg,var(--text),var(--gold-2));-webkit-background-clip:text;background-clip:text;color:transparent}
-.ai-w-name{font-size:13px;font-weight:800;color:var(--gold-2)}
-.ai-w-sub{font-size:13px;color:var(--text-3);max-width:420px;margin-top:2px}
-.ai-quick{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;width:100%;margin-top:20px}
-.ai-quick .quick{display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 12px;border-radius:var(--r-lg);border:1px solid var(--line-strong);background:var(--surface);color:var(--text-2);font-size:13px;font-weight:800;cursor:pointer;transition:all var(--t-fast);text-align:center}
-.ai-quick .quick:hover{border-color:var(--gold-2);background:var(--surface-2);color:var(--text);transform:translateY(-1px)}
+/* ميتا هادئة: الدور + الوقت */
+.ai-meta{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.ai-msg.ai>.ai-bubble>.ai-meta{margin-bottom:4px}
+.ai-role{font-size:11px;font-weight:900;color:var(--text-3);display:inline-flex;align-items:center;gap:6px;letter-spacing:.1px}
+.ai-msg.ai .ai-role{color:var(--em-3)}
+.ai-role::before{content:"";width:5px;height:5px;border-radius:50%;background:linear-gradient(var(--gold-2),var(--em-3))}
+.ai-msg.user .ai-role{color:var(--text-3)}
+.ai-msg.user .ai-role::before{background:var(--gold-grad)}
+.ai-time{font-size:10.5px;color:var(--text-4);font-weight:600}
+.ai-tag{display:inline-block;font-size:10px;font-weight:900;color:var(--gold-2);margin-bottom:5px;padding:2px 8px;border-radius:99px;border:1px solid rgba(214,183,122,.25);background:rgba(214,183,122,.08)}
 
-/* ── شريط الإدخال ── */
-.ai-inputbar{flex:none;display:flex;flex-direction:column;gap:6px}
-.ai-modebar{display:flex;align-items:center;justify-content:center;gap:8px}
-.ai-mode-chip{font-size:11px;font-weight:800;color:var(--em-3);background:rgba(47,117,104,.12);border:1px solid rgba(111,169,155,.28);padding:4px 12px;border-radius:99px;display:inline-flex;align-items:center;gap:6px}
+/* ── 4) محتوى الرد (Markdown آمن) ── */
+.ai-md{min-width:0}
+.ai-md p{margin:0 0 9px}
+.ai-md p:last-child{margin-bottom:0}
+.ai-md h1,.ai-md h2,.ai-md h3,.ai-md h4{margin:14px 0 8px;color:var(--text);line-height:1.45;letter-spacing:-.2px}
+.ai-md h1{font-size:19px;font-weight:900}
+.ai-md h2{font-size:17px;font-weight:900}
+.ai-md h3,.ai-md h4{font-size:15px;font-weight:900}
+.ai-md ul,.ai-md ol{margin:0 0 10px;padding-inline-start:22px;display:flex;flex-direction:column;gap:5px}
+.ai-md li{margin:0;min-width:0}
+.ai-md li::marker{color:var(--gold-2)}
+.ai-md strong{color:var(--text);font-weight:900}
+.ai-md em{font-style:italic;color:var(--text)}
+.ai-md code.ai-c{font-family:ui-monospace,Consolas,monospace;font-size:13px;background:var(--chip);border:1px solid var(--line);border-radius:7px;padding:1px 7px;color:var(--gold-3);direction:ltr;unicode-bidi:embed}
+.ai-md pre{
+  margin:12px 0;padding:13px 15px;border-radius:var(--r-md);overflow-x:auto;direction:ltr;text-align:left;
+  background:rgba(9,10,12,.68);border:1px solid var(--line);
+}
+html[data-theme="light"] .ai-md pre{background:rgba(9,10,12,.8)}
+.ai-md pre code{font-family:ui-monospace,Consolas,monospace;font-size:13px;color:var(--text-2);background:none;border:none;padding:0}
+.ai-md hr{border:none;height:1px;border-radius:99px;background:linear-gradient(90deg,transparent,rgba(214,183,122,.4),transparent);margin:14px 0}
+.ai-md blockquote{margin:8px 0;padding:7px 14px;border-inline-start:3px solid var(--gold-2);background:linear-gradient(90deg,rgba(214,183,122,.08),transparent);border-radius:var(--r-sm);color:var(--text-3)}
+.ai-md a{color:var(--gold-2);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1.5px}
+.ai-md a:hover{color:var(--gold-3)}
+
+/* ── 5) أدوات الرسالة: صغيرة وهادئة، تظهر عند hover ── */
+.ai-actions{display:flex;gap:5px;margin-top:9px;flex-wrap:wrap}
+.ai-msg.ai:not(.thinking):not(.err) .ai-actions{opacity:0;transform:translateY(2px);transition:opacity var(--t-fast),transform var(--t-fast)}
+.ai-msg.ai:not(.thinking):not(.err):hover .ai-actions,
+.ai-msg.ai:not(.thinking):not(.err) .ai-actions:focus-within{opacity:1;transform:none}
+@media (hover:none){.ai-msg.ai:not(.thinking):not(.err) .ai-actions{opacity:1;transform:none}}
+.ai-act{
+  display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;
+  color:var(--text-3);padding:5px 11px;min-height:30px;border-radius:99px;border:1px solid transparent;
+  background:transparent;transition:all var(--t-fast);cursor:pointer;
+}
+.ai-act svg{width:13px;height:13px;flex:none}
+.ai-act:hover{color:var(--gold-2);background:rgba(214,183,122,.1);border-color:rgba(214,183,122,.28)}
+.ai-act.done{color:var(--em-3);background:rgba(47,117,104,.12);border-color:rgba(111,169,155,.3)}
+.ai-act.danger:hover{color:var(--danger-text);border-color:var(--red-line);background:var(--red-soft)}
+
+/* ── 6) شاشة الترحيب: في منتصف المساحة ── */
+.ai-welcome{max-width:600px;width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px}
+.ai-logo{
+  width:64px;height:64px;border-radius:19px;display:grid;place-items:center;position:relative;
+  background:var(--surface-2);border:1px solid var(--line-strong);
+  backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%);
+  box-shadow:0 14px 30px -16px rgba(0,0,0,.45);
+  animation:ai-logo-in .5s var(--ease) both;
+}
+@keyframes ai-logo-in{from{opacity:0;transform:translateY(10px) scale(.92)}to{opacity:1;transform:none}}
+.ai-logo .ai-logo-img{width:72%;height:72%;border-radius:12px;object-fit:cover}
+.ai-logo .ai-spark{
+  position:absolute;top:-5px;inset-inline-end:-5px;width:21px;height:21px;display:grid;place-items:center;
+  color:#18130A;background:var(--gold-grad);border-radius:8px;z-index:2;box-shadow:0 5px 14px -4px rgba(214,183,122,.9);
+}
+.ai-w-title{margin-top:18px;font-size:31px;font-weight:800;letter-spacing:-.5px;color:var(--text);animation:ai-rise .45s var(--ease) both .06s}
+.ai-w-hello{margin-top:2px;font-size:18px;font-weight:700;color:var(--text-2);animation:ai-rise .45s var(--ease) both .12s}
+.ai-w-sub{font-size:14.5px;color:var(--text-3);max-width:540px;line-height:1.9;margin-top:4px;animation:ai-rise .45s var(--ease) both .18s}
+@keyframes ai-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.ai-quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;width:100%;margin-top:22px;max-width:560px}
+.ai-quick .quick{
+  display:flex;align-items:center;gap:11px;text-align:start;padding:12px 14px;border-radius:var(--r-lg);
+  min-width:0;min-height:44px;cursor:pointer;background:var(--surface);
+  border:1px solid var(--line-strong);color:var(--text-2);transition:all var(--t-fast);
+  animation:ai-card-in .42s var(--ease) both;
+}
+@keyframes ai-card-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.ai-quick .quick:nth-child(1){animation-delay:.08s}
+.ai-quick .quick:nth-child(2){animation-delay:.14s}
+.ai-quick .quick:nth-child(3){animation-delay:.2s}
+.ai-quick .quick:nth-child(4){animation-delay:.26s}
+.ai-quick .q-ic{flex:none;width:34px;height:34px;border-radius:var(--r-md);display:grid;place-items:center;font-size:17px;background:var(--chip);border:1px solid var(--line);transition:all var(--t-fast)}
+.ai-quick .q-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ai-quick .q-txt b{font-size:13px;font-weight:900;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai-quick .q-txt small{font-size:11.5px;color:var(--text-3);line-height:1.5}
+.ai-quick .quick:hover{transform:translateY(-2px);border-color:rgba(214,183,122,.55)}
+.ai-quick .quick:hover .q-ic{border-color:rgba(214,183,122,.4);background:rgba(214,183,122,.1)}
+.ai-quick .quick:active{transform:translateY(0) scale(.98)}
+
+/* ── 7) الـ Composer: ثابت أسفل الصفحة ── */
+.ai-inputbar{flex:none;width:100%;max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:8px;padding:2px 24px 12px;position:relative;z-index:2}
+.ai-inputbar::before{content:"";position:absolute;inset-inline:0;top:0;height:1px;background:var(--line);opacity:.45}
+.ai-modebar{display:flex;align-items:center;justify-content:center;gap:7px}
+.ai-mode-chip{font-size:11px;font-weight:800;color:var(--em-3);background:rgba(47,117,104,.1);border:1px solid rgba(111,169,155,.26);padding:4px 13px;border-radius:99px;display:inline-flex;align-items:center;gap:6px}
+.ai-mode-chip::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--em-3)}
 .ai-mode-clear{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);background:var(--surface-2);color:var(--text-3);display:grid;place-items:center;cursor:pointer;transition:all var(--t-fast)}
 .ai-mode-clear:hover{color:var(--danger-text);border-color:var(--red-line)}
-.ai-input{display:flex;align-items:flex-end;gap:10px;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r-lg);padding:8px;transition:border-color var(--t-fast),box-shadow var(--t-fast)}
-.ai-input:focus-within{border-color:var(--gold-2);box-shadow:0 0 0 3px rgba(214,183,122,.12)}
-.ai-input-ta{flex:1;min-width:0;border:none;background:transparent;resize:none;font-family:var(--font-ar);font-size:14.5px;line-height:1.7;color:var(--text);outline:none;padding:6px 4px;max-height:150px}
+.ai-notice{
+  display:none;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;
+  font-size:12px;font-weight:800;color:var(--text-3);
+  padding:8px 14px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--surface);
+}
+.ai-notice.show{display:flex;animation:ai-rise .3s var(--ease) both}
+.ai-notice svg{width:14px;height:14px;flex:none}
+.ai-notice.warn{color:var(--gold-2);border-color:rgba(214,183,122,.3);background:rgba(214,183,122,.07)}
+.ai-notice.offline{color:var(--text-3);border-color:var(--red-line);background:var(--red-soft)}
+.ai-notice .ai-act{white-space:nowrap}
+.ai-input{
+  position:relative;display:flex;align-items:flex-end;min-height:58px;
+  border-radius:27px;padding:10px;background:var(--surface);border:1px solid var(--line-strong);
+  box-shadow:0 16px 42px -22px rgba(0,0,0,.6),var(--inset);
+  transition:border-color var(--t-fast),box-shadow var(--t-fast),background var(--t-fast);
+}
+.ai-input:focus-within{border-color:var(--em-3);box-shadow:0 16px 46px -22px rgba(0,0,0,.6),0 0 0 3px rgba(111,169,155,.14)}
+.ai-input-ta{
+  flex:1;min-width:0;border:none;background:transparent;resize:none;outline:none;
+  font-family:var(--font-ar);font-size:15px;line-height:1.6;color:var(--text);
+  padding-block:12px;padding-inline:20px 66px;max-height:200px;
+}
 .ai-input-ta::placeholder{color:var(--text-4)}
-.ai-send{flex:none;width:44px;height:44px;border-radius:14px;padding:0;display:grid;place-items:center}
-.ai-inputbar.busy .ai-send{opacity:.5;pointer-events:none}
+.ai-send{
+  position:absolute;inset-inline-end:10px;bottom:10px;width:40px;height:40px;border-radius:50%;
+  padding:0;display:grid;place-items:center;
+  background:linear-gradient(150deg,#E8CF98,var(--gold-2));color:#18130A;
+  box-shadow:0 6px 18px -5px rgba(191,160,106,.6),inset 0 1px 0 rgba(255,255,255,.4);
+  transition:all var(--t-fast);cursor:pointer;
+}
+.ai-send svg{width:18px;height:18px}
+.ai-send:hover:not(:disabled):not(.off){transform:translateY(-1px) scale(1.04);box-shadow:0 9px 22px -5px rgba(191,160,106,.75)}
+.ai-send:active:not(:disabled){transform:translateY(0) scale(.95)}
+.ai-send:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(214,183,122,.4)}
+.ai-send:disabled{cursor:default;opacity:.8}
+.ai-send.off{opacity:.4;cursor:default}
+.ai-send .ai-send-load{display:none}
+.ai-input.busy .ai-send-load{display:inline-flex;align-items:center;gap:3px}
+.ai-send-load i{width:4px;height:4px;border-radius:50%;background:#18130A;display:inline-block;animation:ai-blink 1s var(--ease) infinite}
+.ai-send-load i:nth-child(2){animation-delay:.18s}
+.ai-send-load i:nth-child(3){animation-delay:.36s}
+.ai-hint{font-size:11px;color:var(--text-4);text-align:center;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:4px}
+.ai-hint .k{display:inline-block;font-family:ui-monospace,Consolas,monospace;font-size:10px;font-weight:800;border:1px solid var(--line);border-radius:6px;padding:1px 6px;background:var(--surface-2);color:var(--text-3)}
+.ai-hint-sub{font-size:10px;opacity:.85}
+
+/* ── 8) التجاوب: كل نقاط الانعطاف في مكان واحد (بدون تعارض) ── */
+@media (min-width:1401px){ .ai-chat-in,.ai-inputbar{max-width:900px} }
+@media (max-width:1280px){ .ai-chat-in,.ai-inputbar{max-width:840px} }
+@media (max-width:1024px){
+  .ai-chat-in,.ai-inputbar{max-width:min(calc(100% - 40px),800px)}
+  .ai-chat-in{padding:20px 20px 160px}
+  .ai-inputbar{padding-inline:16px;padding-bottom:10px}
+  .ai-header{padding-inline:16px}
+}
+@media (max-width:768px){
+  .ai-header{min-height:56px;padding-inline:14px}
+  .ai-head-sub{display:none}
+  .ai-chat-in{padding:16px 16px 150px;gap:26px}
+  .ai-inputbar{width:calc(100% - 24px);margin-inline:auto;padding-inline:0}
+  .ai-w-title{font-size:27px}
+}
+@media (max-width:600px){
+  .ai-clear span{display:none}
+  .ai-clear{width:38px;height:38px;padding:0;justify-content:center}
+  .ai-header{padding-inline:12px}
+  .ai-head-ic{width:34px;height:34px;border-radius:var(--r-md)}
+  .ai-status{padding:4px 10px;font-size:11px}
+  .ai-chat-in{padding:16px 14px 150px;gap:24px}
+  .ai-w-title{font-size:26px}
+  .ai-w-hello{font-size:17px}
+  .ai-w-sub{font-size:13.5px;max-width:430px}
+  .ai-quick{gap:10px;max-width:520px}
+.ai-logo{width:54px;height:54px;border-radius:var(--r-lg)}
+  .ai-logo .ai-logo-img{width:36px!important;height:36px!important;border-radius:10px}
+  .ai-hint-sub{display:none}
+}
+@media (max-width:480px){
+  .ai-msg.user{max-width:88%}
+  .ai-inputbar{width:calc(100% - 16px);gap:6px;padding-inline:0;padding-bottom:8px}
+  .ai-input{min-height:56px}
+  .ai-input-ta{font-size:14px;max-height:190px}
+}
+@media (max-width:430px){
+  .ai-chat-in{padding:12px 12px 145px}
+  .ai-msg.user{max-width:90%}
+  .ai-inputbar{width:calc(100% - 16px)}
+  .ai-input{min-height:54px}
+  .ai-send{width:36px;height:36px;bottom:9px;inset-inline-end:9px}
+  .ai-input-ta{padding-inline:16px 58px}
+  .ai-hint{font-size:10px}
+}
+@media (max-width:390px){
+  .ai-header{min-height:52px;padding-inline:10px;gap:8px}
+  .ai-head-txt .page-title{font-size:16px}
+  .ai-chat-in{padding:8px 10px 140px;gap:22px}
+  .ai-inputbar{width:calc(100% - 16px)}
+  .ai-status{display:none}
+}
+@media (max-width:360px){
+  .ai-w-title{font-size:23px}
+  .ai-w-sub{font-size:12.5px;line-height:1.8}
+  .ai-quick{gap:8px}
+  .ai-quick .quick{padding:10px 11px;gap:8px}
+  .ai-quick .q-ic{width:30px;height:30px;border-radius:var(--r-sm);font-size:15px}
+  .ai-quick .q-txt b{font-size:12px}
+  .ai-quick .q-txt small{font-size:10.5px}
+  .ai-msg>.ai-av{width:24px;height:24px}
+}
+@media (max-width:340px){
+  .ai-msg.user{max-width:94%}
+  .ai-msg.ai>.ai-bubble{font-size:14px}
+}
+/* الوضع الأفقي القصير */
+@media (max-height:520px) and (orientation:landscape){
+  .ai-header{min-height:50px;padding-block:6px}
+  .ai-chat-in.centered{padding-top:10px}
+  .ai-welcome{padding:2px}
+.ai-logo{width:48px;height:48px;border-radius:var(--r-lg)}
+  .ai-logo .ai-logo-img{width:32px!important;height:32px!important;border-radius:9px}
+  .ai-quick{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px}
+  .ai-quick .q-txt small{display:none}
+  .ai-hint{display:none}
+}
+
+/* احترام تفضيل تقليل الحركة */
+@media (prefers-reduced-motion: reduce){
+  .ai-msg,.ai-quick .quick,.ai-w-title,.ai-w-hello,.ai-w-sub,.ai-logo,
+  .ai-logo .ai-spark,.ai-status-dot::after,.ai-msg.thinking .t,.ai-notice.show{animation:none !important}
+}
