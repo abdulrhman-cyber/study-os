@@ -98,14 +98,19 @@ App.Views = App.Views || {};
   /* ── Subject Tabs ── */
   function subjectTabsHTML(){
     const subs = D.subjects.filter(s => s.id !== "general");
-    return '<div class="ls-subjects" id="ls-subjects">' +
-      subs.map(s => {
-        const active = selectedSubject === s.id;
-        return '<button class="ls-subject-pill' + (active ? " active" : "") + '" data-ls-subj="' + s.id + '" style="' + (active ? "border-color:" + s.accent + ";background:" + s.accent + "18;box-shadow:0 0 0 1px " + s.accent + "40" : "") + '">' +
-          '<span class="ls-pill-dot" style="background:' + s.accent + '"></span>' +
-          '<span class="ls-pill-name">' + U.esc(s.name) + '</span>' +
-        '</button>';
-      }).join("") +
+    const pills = subs.map(s => {
+      const active = selectedSubject === s.id;
+      return '<button class="ls-subject-pill' + (active ? " active" : "") + '" data-ls-subj="' + s.id + '" style="' + (active ? "border-color:" + s.accent + ";background:" + s.accent + "18;box-shadow:0 0 0 1px " + s.accent + "40" : "") + '">' +
+        '<span class="ls-pill-dot" style="background:' + s.accent + '"></span>' +
+        '<span class="ls-pill-name">' + U.esc(s.name) + '</span>' +
+      '</button>';
+    }).join("");
+    return '<div class="ls-subjects-wrap">' +
+      '<div class="ls-subjects-head">' +
+        '<div class="ls-subjects-label">' + I.get("book", 16) + ' <span>اختر المادة</span></div>' +
+        '<button class="btn sm ghost" id="ls-subjects-settings">' + I.get("settings", 14) + ' إدارة المواد</button>' +
+      '</div>' +
+      '<div class="ls-subjects" id="ls-subjects">' + pills + '</div>' +
     '</div>';
   }
 
@@ -409,7 +414,6 @@ App.Views = App.Views || {};
 
   /* ── Main Render ── */
   function render(root){
-    document.body.classList.add("ai-route");
     if (!isLoggedIn()){
       root.innerHTML =
         '<div class="page-head"><div><div class="page-title">📚 ملخصات المحاضرات</div>' +
