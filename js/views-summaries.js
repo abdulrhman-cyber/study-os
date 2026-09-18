@@ -414,7 +414,7 @@ App.Views = App.Views || {};
       root.innerHTML =
         '<div class="page-head"><div><div class="page-title">📚 ملخصات المحاضرات</div>' +
         '<div class="page-sub">مكتبة منظمة لملخصات المحاضرات</div></div></div>' +
-        '<div class="card glass-1">' + loginRequiredHTML() + '</div>';
+        '<div class="card glass-1" style="flex:1;display:flex;flex-direction:column">' + loginRequiredHTML() + '</div>';
       return;
     }
 

@@ -156,8 +156,8 @@ html[data-theme="light"] .card:hover{border-color:rgba(169,130,69,.2)}
 .main::-webkit-scrollbar-track{background:transparent}
 .main::-webkit-scrollbar-thumb{background:transparent;border-radius:99px}
 .main:hover::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#BFA06A,#E8CF98)}
-.content{display:flex;flex-direction:column;gap:16px;padding-bottom:96px;min-height:min-content}
-.view{animation:page-in .45s var(--ease) both;max-width:1540px;margin-inline:auto;width:100%}
+.content{display:flex;flex-direction:column;gap:16px;padding-bottom:48px;flex:1;min-height:0}
+.view{animation:page-in .45s var(--ease) both;max-width:1540px;margin-inline:auto;width:100%;display:flex;flex-direction:column;gap:16px;flex:1;min-height:0}
 @keyframes page-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 
 /* â”€â”€ Sidebar : floating premium dock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -294,10 +294,10 @@ html[data-theme="dark"] .tb-search{background:rgba(255,255,255,.035);border-colo
 .tb-pill svg{width:15px;height:15px}
 
 /* â”€â”€ View pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-.view{animation:page-in .45s var(--ease) both}
+.view{animation:page-in .45s var(--ease) both;max-width:1540px;margin-inline:auto;width:100%;display:flex;flex-direction:column;gap:16px;flex:1;min-height:0}
 @keyframes page-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
-.page-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.page-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px}
 .page-title{font-size:24px;font-weight:900;letter-spacing:.3px}
 .page-sub{font-size:13px;color:var(--text-3)}
 .head-actions{margin-inline-start:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -1633,7 +1633,7 @@ html[data-theme="light"] .ai-md pre{background:rgba(9,10,12,.8)}
 }
 
 /* ══ Lecture Summaries — Premium Redesign ══ */
-.ls-subjects{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
+.ls-subjects{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
 .ls-subjects::-webkit-scrollbar{display:none}
 .ls-subject-pill{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);color:var(--text-2);font-size:13px;font-weight:800;white-space:nowrap;cursor:pointer;transition:all .2s var(--ease);flex-shrink:0}
 .ls-subject-pill:hover{transform:translateY(-2px);color:var(--text)}
@@ -1642,16 +1642,16 @@ html[data-theme="light"] .ai-md pre{background:rgba(9,10,12,.8)}
 .ls-pill-name{line-height:1}
 
 .ls-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
-.ls-stat{padding:14px 12px;border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--line);text-align:center;transition:all .2s var(--ease)}
+.ls-stat{padding:12px 10px;border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--line);text-align:center;transition:all .2s var(--ease)}
 .ls-stat:hover{border-color:var(--line-strong)}
-.ls-stat-val{font-size:22px;font-weight:900;direction:ltr;color:var(--gold-2);line-height:1.2}
-.ls-stat-lbl{font-size:11px;color:var(--text-3);font-weight:700;margin-top:2px}
+.ls-stat-val{font-size:20px;font-weight:900;direction:ltr;color:var(--gold-2);line-height:1.2}
+.ls-stat-lbl{font-size:11px;color:var(--text-3);font-weight:700;margin-top:1px}
 .ls-stat-read .ls-stat-val{color:var(--em-3)}
 .ls-stat-reading .ls-stat-val{color:var(--gold-2)}
 .ls-stat-unread .ls-stat-val{color:var(--text-3)}
 .ls-stat-fav .ls-stat-val{color:#E8CF98}
 
-.ls-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ls-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .ls-toolbar-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0;flex-wrap:wrap}
 .ls-toolbar-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .ls-search-wrap{position:relative;flex:1;min-width:200px;max-width:360px}
@@ -1664,7 +1664,7 @@ html[data-theme="light"] .ai-md pre{background:rgba(9,10,12,.8)}
 .ls-filter-chip.active{background:rgba(214,183,122,.12);border-color:var(--brd-2);color:var(--gold-2)}
 .ls-sort-select{padding:7px 30px 7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--solid);color:var(--text-2);font-size:12px;font-weight:700;cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239B9A95' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
 
-.ls-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.ls-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;flex:1;align-content:start}
 .ls-card{padding:0;display:flex;flex-direction:column;overflow:hidden;transition:transform .22s var(--ease),box-shadow .22s var(--ease);cursor:default}
 .ls-card:hover{transform:translateY(-4px);box-shadow:var(--shadow-3)}
 .ls-card-top{display:flex;align-items:flex-start;gap:12px;padding:18px 18px 0}
@@ -1697,8 +1697,8 @@ html[data-theme="light"] .ai-md pre{background:rgba(9,10,12,.8)}
 .sk-pulse{animation:ls-pulse 1.6s ease-in-out infinite}
 @keyframes ls-pulse{0%,100%{opacity:.4}50%{opacity:.7}}
 
-.ls-empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:48px 20px;gap:6px}
-.ls-empty-icon{width:80px;height:80px;border-radius:24px;background:var(--surface-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--gold-2);margin-bottom:8px}
+.ls-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px 20px;gap:6px;flex:1;min-height:0}
+.ls-empty-icon{width:72px;height:72px;border-radius:22px;background:var(--surface-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--gold-2);margin-bottom:4px}
 .ls-empty-title{font-size:17px;font-weight:900;color:var(--text-h,var(--text))}
 .ls-empty-sub{font-size:13px;color:var(--text-3);max-width:340px;margin-top:2px}
 
