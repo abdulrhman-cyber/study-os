@@ -576,5 +576,5 @@ App.Views = App.Views || {};
     refreshList();
   }
 
-  App.Views.register("summaries", render, { rerender: true, title: "ملخصات المحاضرات" });
+  App.Views.register("summaries", render, { rerender: false, title: "ملخصات المحاضرات" });
 })();
