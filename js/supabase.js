@@ -292,6 +292,7 @@ window.App = window.App || {};
 
   async function syncNow(session){
     if (runningSync) return runningSync;
+    const c0 = changeCounter;
     runningSync = (async () => {
       try {
         if (!session){
@@ -302,7 +303,11 @@ window.App = window.App || {};
         if (!session) return { ok: false, error: "أنت غير مسجّل الدخول — التغييرات محفوظة محليًا وستُرفع تلقائيًا عند تسجيل الدخول." };
         const uid = session.user.id;
         const attempt = reconciled[uid] ? lwwSync(session) : reconcile(session);
-        return await withSyncTimeout(attempt);
+        const res = await withSyncTimeout(attempt);
+        // لا ننظّف علم dirty إلا بعد مزامنة ناجحة لم يقع خلالها أي تعديل جديد —
+        // أي تعديل أثناء الرفع يبقي العلم قائمًا فتأتي جولة أخرى بأحدث حالة.
+        if (res.ok && changeCounter === c0) syncDirty = false;
+        return res;
       } catch(e){
         safeEmit("sync-status", { state: "error", error: (e && e.message) || String(e) });
         return { ok: false, error: (e && e.message) || String(e) };
@@ -402,6 +407,31 @@ window.App = window.App || {};
   let syncing = null;
   function pushDebounced(){}
 
+  /* ══ auto-sync القائم على التعديلات: dirty + counter + pump (التزامن/الازدواج) ══
+     syncDirty   : يوجد تعديل محلي لم يُرفع للسحابة بعد.
+     changeCounter: عدد المرات التي وقع فيها تعديل منذ بدء المزامنة — نستخدمه
+                    لنعرف «هل حدث تعديل جديد أثناء المزامنة نفسها؟» (لا يمسح
+                    العلم إلا بعد رفع الطرف الأحدث فعلًا).
+     rerunQueued : تعديلٌ وصل أثناء مزامنة شغّالة → نعيد المزامنة بأحدث state.
+     pumping     : حارس يمنع تشغيل أكثر من pump واحد في نفس الوقت.              */
+  let syncDirty = false;
+  let changeCounter = 0;
+  let rerunQueued = false;
+  let pumping = false;
+  let lastSuccessToastAt = 0;
+  const SUCCESS_TOAST_GAP_MS = 3000;
+  function markDirty(){
+    changeCounter++;
+    syncDirty = true;
+    schedule();
+  }
+  function successToastDeduped(){
+    const now = Date.now();
+    if (now < lastSuccessToastAt + SUCCESS_TOAST_GAP_MS) return; // لا نكرر بشكل مزعج
+    lastSuccessToastAt = now;
+    try { if (App.UI && App.UI.toast) App.UI.toast("تمت المزامنة مع السحابة.", "success", "check"); } catch(e){}
+  }
+
   function addAuthListener(){
     if (ready) return;
     ready = true;
@@ -460,7 +490,7 @@ window.App = window.App || {};
       connRetry = 0;
       const res = await syncNow(s.session);
       if (res && res.ok){
-        toast("تمت المزامنة مع السحابة.", "success", "check");
+        successToastDeduped();
       } else if (res && res.timeout){
         toast((res && res.error) || "تعذرت المزامنة — سنعيد المحاولة تلقائيًا.", "error", "close");
         setTimeout(() => syncNow(s.session).then(() => {}, () => {}), ONLINE_RETRY_MS);
@@ -521,21 +551,9 @@ window.App = window.App || {};
     }
   };
 
-  /* ══ auto-sync hook (بدون كسر المسار الحالي) ══ */
+  /* ══ auto-sync hook (مركزي: أي تعديل فعلي على state → حفظ محلي → جدولة مزامنة) ══ */
   (function hookStore(){
     try {
-      if (App.Store && App.Store.changed){
-        // نسجل على الـ change events (لو موجودة) — وبعدين نحاول من جديد كل ثانية
-        // لغاية ما المتجر يكون جاهز
-        if (window.App && App.Util && App.Util.on){
-          try {
-            App.Util.on("change", function(){
-              App.Sync.schedule && App.Sync.schedule();
-            });
-          } catch(e){}
-        }
-      }
-      // ربط عام: أي emit بالاسم change
       const bind = () => {
         if (window.App && App.Util && App.Util.on){
           try {
@@ -543,25 +561,62 @@ window.App = window.App || {};
           } catch(e){}
         }
       };
+      /* كل تغيير حقيقي في بيانات المستخدم (مهام، جلسات، مواد/أهداف، واجبات،
+         ملاحظات، أخطاء، mastery، خطط، إعدادات وأهداف، إنجازات، إشعارات، XP…)
+         → حفظ محلي فوري (يسبق event) من Store، ثم يُعلّم dirty ويجدول رفعًا
+         تلقائيًا. لا يتطلب أي زر في Settings. */
       function onAnyChange(){
-        schedule();
+        markDirty();
       }
       bind();
     } catch(e){}
   })();
 
   let scheduleTimer = null;
-  function schedule(){
+  function schedule(delayMs){
     clearTimeout(scheduleTimer);
     scheduleTimer = setTimeout(() => {
-      // أثناء الانقطاع الفعلي لا نطلق طلبات لمصادفة فشل — حدث "online" سيشغّل المزامنة
+      // أثناء الانقطاع الفعلي لا نطلق طلبات — حدث "online" (مع جاهزية الجلسة)
+      // سيشغّل المزامنة ويُظهر النتيجة بشفافية.
       if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       getSession().then(s => {
         if (s.ok && s.session){
-          syncNow(s.session);
+          pumpSync(s.session);
         }
       });
-    }, 900);
+    }, delayMs || 900);
+  }
+
+  /* مضخّة مزامنة: تجري المزامنة الحالية، وتستمر بجولات متتالية حتى لا يبقى
+     تعديل جديد وقع أثناء الرفع، مع حماية من:
+       – concurrent pumps (pumping)
+       – duplicate sync (debounce 900ms في schedule + مزاحمة syncNow عبر runningSync)
+       – لا جلسة (ننتظر حتى تسجيل الدخول ولا نرسل شيئًا)
+       – offline (فوق: no navigator.onLine === false)
+       – طلب معلّق/عالق (SYNC_TIMEOUT_MS داخل syncNow) */
+  async function pumpSync(session){
+    if (pumping){ rerunQueued = true; return; }
+    pumping = true;
+    const hadWorkAtEntry = syncDirty;
+    let failed = false;
+    try {
+      let safety = 0;
+      while (safety < 4){                       // حدّ أمان: المحاولات المتتالية بلا راحة
+        safety++;
+        rerunQueued = false;
+        const res = await syncNow(session);
+        if (!res || !res.ok){ failed = true; return; }   // فشل → إعادة لاحقة هادئة
+        if (!rerunQueued && !syncDirty) break;            // نظيف: لا تعديلات خلال الرفع
+        // تعديلٌ وقع أثناء المزامنة أو تعديلٌ لم يُرفع → جولة أخرى بأحدث state
+      }
+      if (hadWorkAtEntry && !syncDirty && !failed){ successToastDeduped(); }
+    } finally {
+      pumping = false;
+      if (rerunQueued || syncDirty){ schedule(failed ? 4000 : 900); }
+    }
   }
   App.Sync.schedule = schedule;
+  App.Sync.pumpSync = pumpSync;
+  App.Sync.dirty = () => syncDirty;
+  App.Sync.autosync = () => ({ dirty: syncDirty, pumping, queued: rerunQueued, online: App.Sync.online() });
 })();

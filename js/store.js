@@ -25,6 +25,8 @@ App.Store = (function () {
         sidebarMode: "expanded",
         density: "comfortable",
         dailyGoalMinutes: 240,
+        weeklyGoalMinutes: 1680,
+        monthlyGoalMinutes: 7200,
         pomodoroStudy: 25, pomodoroBreak: 5, pomodoroLong: 20, pomodoroSessions: 4,
         focusDuration: 30,
         sound: true,
@@ -37,6 +39,7 @@ App.Store = (function () {
       notifications: [], activityLog: [], unlocked: {},
       pomodoroCount: 0,
       daily: {},
+      studyPlans: [],
       levelUps: []
     };
   }
@@ -98,7 +101,7 @@ App.Store = (function () {
     if (!st.daily) st.daily = {};
     if (!st.activityLog) st.activityLog = [];
     if (!st.unlocked) st.unlocked = {};
-    ["tasks","homework","blocks","mistakes","notes","exams","notifications","levelUps"].forEach(k => {
+    ["tasks","homework","blocks","mistakes","notes","exams","notifications","levelUps","studyPlans"].forEach(k => {
       if (!Array.isArray(st[k])) st[k] = [];
     });
     // legacy mistakes: backfill spaced-review scheduling fields
@@ -649,6 +652,10 @@ App.Store = (function () {
     } catch(e){ return { ok: false, error: "تعذر قراءة الملف — صيغة JSON غير صالحة." }; }
   }
   function importData(json){
+    try {
+      // نسخة أمان تفاعلية قبل الاستبدال — يمكن الرجوع إليها من مخزن المتصفح
+      localStorage.setItem(activeKey + ".bak.import." + Date.now(), JSON.stringify({ v: 1, savedAt: U.iso(), data: state }));
+    } catch(e){}
     const p = JSON.parse(json);
     const d = p && (p.data || p);
     state = Object.assign(defaults(), d);
@@ -744,6 +751,225 @@ App.Store = (function () {
   }
 
   function getState(){ return state; }
+
+  /* ═══════════ الأهداف + التقدّم ═══════════
+     مصدر الحقيقة = جلسات الدراسة الفعلية (st.blocks) — لا نعتمد على st.daily
+     أبدًا لحساب الأهداف لأن daily قيمة مشتقة/مخزنة قد تكون قديمة أو من استيراد. */
+
+  /* دقائق فعلية في نطاق (من ضمن blocks فقط) — اختياريًا لمادة محددة */
+  function blocksMinutes(st, fromKey, toKey, subject){
+    st = st || state;
+    let sum = 0;
+    (st.blocks || []).forEach(b => {
+      if (b && b.minutes > 0 && b.date >= fromKey && b.date <= toKey && (!subject || b.subject === subject)) sum += b.minutes;
+    });
+    return sum;
+  }
+
+  function rangeOfGoal(kind){
+    const t = U.fromKey(U.todayKey());
+    if (kind === "day"){
+      return { from: U.todayKey(), to: U.todayKey() };
+    }
+    if (kind === "week"){
+      const s = U.startOfWeek(t);
+      const from = U.dateKey(s);
+      return { from, to: U.addDaysKey(from, 6) };
+    }
+    const s = U.startOfMonth(t);
+    const from = U.dateKey(s);
+    return { from, to: U.dateKey(U.endOfMonth(t)) };
+  }
+
+  /* حالة الهدف لمدى معين (day/week/month): من blocks، مع تقدير "متأخر" */
+  function goalStatus(kind){
+    const st = state;
+    const goal = kind === "day" ? st.settings.dailyGoalMinutes
+               : kind === "week" ? st.settings.weeklyGoalMinutes
+               : st.settings.monthlyGoalMinutes;
+    const r = rangeOfGoal(kind);
+    const done = blocksMinutes(st, r.from, r.to);
+    const today = U.fromKey(U.todayKey());
+    // الأيام المنقضية من بداية المدى حتى اليوم (شاملة اليوم)
+    const elapsed = Math.max(1, U.daysBetween(r.from, U.todayKey()) + 1);
+    const totalDays = U.daysBetween(r.from, r.to) + 1;
+    const pct = Math.min(100, Math.round(done / goal * 100));
+    const remain = Math.max(0, goal - done);
+    const expected = Math.round(goal * elapsed / totalDays);
+    const behind = (done < expected) && kind !== "day";
+    return { kind, from: r.from, to: r.to, done, goal, pct, remain, expected, behind, delta: expected - done };
+  }
+
+  /* التقدم الشهري لكل مادة مقابل هدفها (subjects[].hourGoal بالساعات) — من blocks */
+  function subjectProgress(st){
+    st = st || state;
+    const r = rangeOfGoal("month");
+    const out = {};
+    D.subjects.forEach(x => {
+      const goalMin = (x.hourGoal || 0) * 60;
+      const done = blocksMinutes(st, r.from, r.to, x.id);
+      out[x.id] = { done, goal: goalMin, pct: goalMin ? Math.min(100, Math.round(done / goalMin * 100)) : 0 };
+    });
+    return out;
+  }
+
+  /* درجة إتقان سؤال (0-100) من سجل المراجعات */
+  function reviewMastery(m){
+    if (!m) return 0;
+    const log = m.reviewLog || [];
+    if (!log.length){
+      if (m.status === "mastered") return 100;
+      if (m.status === "improving") return 55;
+      if (m.status === "review") return 25;
+      return 0;
+    }
+    const correct = log.filter(r => r.correct).length;
+    return Math.max(0, Math.min(100, Math.round(correct / log.length * 100)));
+  }
+
+  /* لوحة تقدّم موحدة: إجماليات + أسئلة + مقارنة الأسبوع الحالي بالسابق (من blocks) */
+  function progressOverview(st){
+    st = st || state;
+    const t = U.todayKey();
+    const ws = U.startOfWeek(U.fromKey(t));
+    const wFrom = U.dateKey(ws);
+    const wTo = U.addDaysKey(wFrom, 6);
+    const wPrevFrom = U.addDaysKey(wFrom, -7);
+    const wPrevTo = U.addDaysKey(wTo, -7);
+
+    const weekNow = blocksMinutes(st, wFrom, wTo);
+    const weekPrev = blocksMinutes(st, wPrevFrom, wPrevTo);
+
+    const perSubject = {};
+    (st.blocks || []).forEach(b => { if (!b || !b.subject) return; perSubject[b.subject] = (perSubject[b.subject] || 0) + (b.minutes || 0); });
+    const entries = Object.keys(perSubject).filter(k => k !== "general").map(k => ({ subject: k, min: perSubject[k] })).sort((a, b) => b.min - a.min);
+    const best = entries[0] || null;
+    const least = entries.length ? entries[entries.length - 1] : null;
+
+    let questions = 0, reviewsTotal = 0, correctTotal = 0;
+    (st.mistakes || []).forEach(m => {
+      questions++;
+      (m.reviewLog || []).forEach(r => { reviewsTotal++; if (r.correct) correctTotal++; });
+    });
+    const mastered = (st.mistakes || []).filter(m => m.status === "mastered").length;
+    const repeated = (st.mistakes || []).filter(m => (m.lastWrong || 0) >= 2).length;
+
+    const totalMin = (st.blocks || []).reduce((a, b) => a + ((b && b.minutes) || 0), 0);
+    const accurate = reviewsTotal ? Math.round(correctTotal / reviewsTotal * 100) : null;
+    const deltaMin = weekNow - weekPrev;
+
+    return {
+      totalMin, sessionsTotal: (st.blocks || []).length,
+      weekNow, weekPrev, deltaMin,
+      deltaPct: weekPrev ? Math.round((weekNow - weekPrev) / weekPrev * 100) : null,
+      best, least,
+      questions, reviewsTotal, correctTotal, accurate,
+      mastered, repeated,
+      perSubject
+    };
+  }
+
+  /* سجل النشاط الدراسي ليوم معيّن: نعيد بناء الأحداث من البيانات الفعلية
+     (جلسات، إنجاز مهام/واجبات، مراجعات أخطاء، امتحانات، ملاحظات، خطط) + سجل الأنشطة */
+  function studyTimeline(st, day){
+    st = st || state;
+    day = day || U.todayKey();
+    const evs = [];
+    const fallback = day + "T08:00:00";
+    const at = ts => { try { const d = ts ? new Date(ts) : new Date(fallback); return d.getTime(); } catch(e){ return 0; } };
+    const push = (ts, icon, txt) => { const t = at(ts); evs.push({ time: t, timeLabel: U.fmtTimeHM(new Date(t)), icon: icon, txt: txt }); };
+
+    (st.blocks || []).forEach(b => {
+      if (!b || b.date !== day) return;
+      push(b.ts || (day + "T08:00:00"), "sessions",
+        "درست " + D.subjName(b.subject) + " " + U.fmtDur(b.minutes) + (b.title ? " — " + b.title : ""));
+    });
+    (st.tasks || []).forEach(t => {
+      if (!t || !t.completed || t.completedOn !== day) return;
+      push(t.completedAt, "tasks", "أنهيت مهمة: " + (t.title || ""));
+    });
+    (st.homework || []).forEach(h => {
+      if (!h || !h.completed || h.completedOn !== day) return;
+      push(h.completedAt, "homework", "أنجزت واجب: " + (h.title || ""));
+    });
+    let cor = 0, wrg = 0, corTs = null, wrgTs = null;
+    (st.mistakes || []).forEach(m => {
+      (m.reviewLog || []).forEach(r => {
+        if (!r || r.date !== day) return;
+        const tsN = r.ts ? at(r.ts) : null;
+        if (r.correct){ cor++; if (!corTs || (tsN && tsN < corTs)) corTs = tsN; }
+        else { wrg++; if (!wrgTs || (tsN && tsN < wrgTs)) wrgTs = tsN; }
+      });
+    });
+    const qn = n => n === 1 ? " سؤالًا واحدًا" : (n === 2 ? " سؤالين" : " أسئلة");
+    if (cor) push(corTs, "check", "أتقنت " + cor + qn(cor) + " من بنك أخطائك");
+    if (wrg) push(wrgTs, "errors", "أخطأت في " + wrg + qn(wrg) + " — راجعها لتتقنها");
+    (st.exams || []).forEach(x => {
+      if (!x || x.date !== day) return;
+      push(x.ts, "achievements", "أنهيت امتحانًا: " + x.correct + "/" + x.count + " صحيح");
+    });
+    (st.notes || []).forEach(n => {
+      if (!n || U.dateKey(new Date(n.createdAt)) !== day) return;
+      push(n.createdAt, "notes", "أضفت ملاحظة: " + (n.title || ""));
+    });
+    (st.studyPlans || []).forEach(p => {
+      if (!p || U.dateKey(new Date(p.createdAt)) !== day) return;
+      push(p.createdAt, "calendar", "أنشأت مخطط مذاكرة لـ " + D.subjName(p.subject));
+    });
+    (st.activityLog || []).forEach(a => {
+      if (!a || U.dateKey(new Date(a.ts || a.t)) !== day) return;
+      if (a.kind === "review" || a.kind === "exam" || a.kind === "plan" || a.kind === "note") return;
+      push(a.ts, a.icon || "star", a.txt);
+    });
+    evs.sort((a, b) => (a.time - b.time) || (a.txt < b.txt ? -1 : 1));
+    return evs;
+  }
+
+  /* ═══════════ المخططات الدراسية (داخل التقويم) ═══════════ */
+
+  function planDays(plan){
+    // الفصول تتوزع بالتساوي على الأيام من غدٍ حتى يوم الامتحان
+    const today = U.todayKey();
+    const days = [];
+    for (let k = U.addDaysKey(today, 1); k <= plan.examDate; k = U.addDaysKey(k, 1)) days.push(k);
+    return days;
+  }
+
+  function planSchedule(plan){
+    const days = planDays(plan);
+    const chapters = Math.max(1, plan.chapters | 0);
+    const per = Math.max(1, Math.ceil(chapters / Math.max(1, days.length)));
+    const out = [];
+    let totalTarget = 0, totalDone = 0;
+    days.forEach((k, i) => {
+      const from = i * per + 1;
+      const to = Math.min(chapters, from + per - 1);
+      const doneMin = blocksMinutes(state, k, k, plan.subject);
+      totalTarget += plan.dailyMinutes;
+      totalDone += doneMin;
+      out.push({ date: k, chapterTitle: (from === to ? "الفصل " + from : "الفصول " + from + "–" + to), targetMin: plan.dailyMinutes, doneMin, done: doneMin >= plan.dailyMinutes });
+    });
+    const chaptersDone = out.filter(d => d.done).length;
+    return { days: out, totalTarget, totalDone, donePct: totalTarget ? Math.min(100, Math.round(totalDone / totalTarget * 100)) : 0, chaptersDone, chapters };
+  }
+
+  function addStudyPlan(data){
+    const p = Object.assign({ id: U.uid(), subject: D.defSubject(), examDate: U.addDaysKey(U.todayKey(), 7), chapters: 5, dailyMinutes: 60, createdAt: U.iso(), updatedAt: U.iso() }, data);
+    state.studyPlans = state.studyPlans || [];
+    state.studyPlans.push(p);
+    logActivity("أنشأت مخططًا: " + D.subjName(p.subject) + " — " + p.chapters + " فصول", "calendar", "plan");
+    changed("plan_added");
+    return p;
+  }
+  function deleteStudyPlan(id){
+    state.studyPlans = (state.studyPlans || []).filter(p => p.id !== id);
+    changed("plan_deleted");
+  }
+  function updateStudyPlan(id, patch){
+    const p = (state.studyPlans || []).find(x => x.id === id); if (!p) return;
+    Object.assign(p, patch, { updatedAt: U.iso() });
+    changed("plan_updated");
+  }
 
   /* ═══════════ مساحات العمل (ضيف / مستخدم) + الدمج الآمن ═══════════ */
 
@@ -870,6 +1096,9 @@ App.Store = (function () {
     generateReminders, nextBestAction,
     exportData, validateImport, importData,
     resetAll, seedDemo, rebuildDaily, changed,
+    goalStatus, blocksMinutes, subjectProgress, reviewMastery, progressOverview,
+    planSchedule, addStudyPlan, deleteStudyPlan, updateStudyPlan,
+    studyTimeline,
     todayStats
   };
 })();

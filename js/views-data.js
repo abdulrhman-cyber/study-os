@@ -45,6 +45,7 @@ window.App = window.App || {};
     const tasksDoneRng = st.tasks.filter(t => t.completed && t.completedOn >= r.from && t.completedOn <= r.to).length;
     const tasksDueRng = st.tasks.filter(t => t.date >= r.from && t.date <= r.to).length;
     const hwDoneRng = st.homework.filter(h => h.completed && h.completedOn >= r.from && h.completedOn <= r.to).length;
+    const tl = S.studyTimeline(st, U.todayKey());
 
     return '' +
       '<div class="page-head"><div><div class="page-title">تحليلات دراستك</div>' +
@@ -69,6 +70,40 @@ window.App = window.App || {};
         UI.statCard("sessions", blocks.length, "عدد الجلسات") +
         UI.statCard("tasks", tasksDoneRng, "مهام مكتملة") +
         UI.statCard("homework", hwDoneRng, "واجبات منجزة") +
+      '</div>' +
+
+      (function(){
+        const po = S.progressOverview(st);
+        const db = po.deltaPct == null
+          ? '<span class="badge neutral">لا مقارنة بعد</span>'
+          : '<span class="badge ' + (po.deltaPct > 0 ? "emerald" : po.deltaPct < 0 ? "red" : "neutral") + '">' +
+            (po.deltaPct > 0 ? "▲ +" : po.deltaPct < 0 ? "▼ " : "＝ ") + Math.abs(po.deltaPct) + "%</span>";
+        return '<div class="card glass-1 chart-card" style="margin-top:4px">' +
+          '<div class="chart-head"><h3>' + I.get("analytics", 15) + ' تقدّمك الدراسي</h3><span class="ch-note">Progress Snapshot</span></div>' +
+          '<div class="stat-grid">' +
+            pstat("clock", "إجمالي ساعات الدراسة", U.fmtDur(po.totalMin)) +
+            pstat("sessions", "جلسات إجمالية", po.sessionsTotal + "") +
+            pstat("best", "أكثر مادة", po.best ? D.subjectById(po.best.subject).name : "—") +
+            pstat("target", "أقل مادة", po.least ? D.subjectById(po.least.subject).name : "—") +
+            pstat("errors", "أسئلة في البنك", po.questions + "") +
+            pstat("check", "نسبة الصحة", (po.accurate == null ? "—" : po.accurate + "%")) +
+            pstat("flame", "أخطاء متقنة", po.mastered + "") +
+            pstat("zap", "أخطاء تكررت", po.repeated + "") +
+          '</div>' +
+          '<div class="dl-row" style="margin-top:10px">' +
+            '<span class="dl-dot" style="background:var(--gold-grad)"></span>' +
+            '<span style="flex:1">هذا الأسبوع: <b>' + U.fmtDur(po.weekNow) + '</b> مقابل <b>' + U.fmtDur(po.weekPrev) + '</b> الأسبوع الماضي</span>' + db +
+          '</div>' +
+        '</div>';
+      })() +
+
+      '<div class="card glass-1" style="margin-top:16px">' +
+        '<div class="card-title">' + I.get("clock", 16) + 'سجل نشاط اليوم <span class="ct-sub">Today\'s Timeline</span></div>' +
+        (tl.length ? tl.map(a =>
+          '<div class="activity-item"><span class="act-time num" style="flex:none;min-width:42px">' + a.timeLabel + '</span>' +
+          '<div class="act-ic">' + I.get(a.icon, 15) + '</div>' +
+          '<div class="act-txt">' + U.esc(a.txt) + '</div></div>').join("")
+          : '<p class="muted small">اجعله يومًا مثمرًا — سجّل أول جلسة الآن.</p>') +
       '</div>' +
 
       '<div class="grid cols-2 an-split">' +
@@ -319,9 +354,17 @@ window.App = window.App || {};
   }, { rerender: true, title: "بنك الأخطاء" });
 
   function renderErrors(st){
-    let list = st.mistakes.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const today = U.todayKey();
+    const errRank = m => {
+      const rep = (m.reviewLog || []).filter(r => r.correct === false).length;
+      const dueNow = m.status === "new" || m.status === "review" || (m.nextReview && m.nextReview <= today);
+      return (rep >= 2 ? 100 : 0) + (dueNow ? 50 : 0) + Math.min(30, rep * 10);
+    };
+    let list = st.mistakes.slice().sort((a, b) => (errRank(b) - errRank(a)) || b.createdAt.localeCompare(a.createdAt));
     if (errF.subject !== "all") list = list.filter(m => m.subject === errF.subject);
-    if (errF.status !== "all") list = list.filter(m => m.status === errF.status);
+    if (errF.status === "weak") list = list.filter(m => m.status !== "mastered");
+    else if (errF.status === "due") list = list.filter(m => m.status === "new" || m.status === "review" || (m.nextReview && m.nextReview <= today));
+    else if (errF.status !== "all") list = list.filter(m => m.status === errF.status);
     const due = S.reviewQueue().length;
     const mastered = st.mistakes.filter(m => m.status === "mastered").length;
 
@@ -341,6 +384,10 @@ window.App = window.App || {};
             const name = sub === "all" ? "كل المواد" : D.subjectById(sub).name;
             return '<button class="filter-chip' + (errF.subject === sub ? " active" : "") + '" data-ef="' + sub + '">' + name + '</button>';
           }).join("") +
+        '</div>' +
+        '<div class="filter-bar" style="padding:4px">' +
+          [["all","الكل"],["weak","غير متقن"],["due","يحتاج مراجعة"],["mastered","متقن"]].map(o =>
+            '<button class="filter-chip' + (errF.status === o[0] ? " active" : "") + '" data-efs="' + o[0] + '">' + o[1] + '</button>').join("") +
         '</div>' +
         '<span class="badge neutral">' + due + ' تحتاج مراجعة</span>' +
         '<span class="badge emerald">' + mastered + ' مُتقن</span>' +
@@ -406,19 +453,34 @@ window.App = window.App || {};
     '</div>';
   }
 
+  /* ترتيب مراجعة قابل للتفسير عبر مستويات واضحة:
+     0) مستحق review (nextReview ≤ اليوم)
+     1) أخطاء متكررة (خطأ فيها مرتين فأكثر)
+     2) إتقان منخفض (< 50%)
+     3) مؤخرًا أخطأت فيها / لم تُقبل بعد
+     4) الباقي (المتقن حديثًا)
+   + خلط عشوائي داخل كل مستوى حتى لا يعيد الموقع نفس السؤال دائمًا */
+  function smartOrder(list, max){
+    const today = U.todayKey();
+    const tier = m => {
+      if (m.nextReview && m.nextReview <= today) return 0;
+      if ((m.lastWrong || 0) >= 2 || (m.reviewLog || []).filter(r => r.correct === false).length >= 2) return 1;
+      if (S.reviewMastery(m) < 50) return 2;
+      if (m.status === "new" || m.status === "review" || (m.reviewLog || []).some(r => r.correct === false)) return 3;
+      return 4;
+    };
+    const shuf = a => { const A = a.slice(); for (let i = A.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); const t = A[i]; A[i] = A[j]; A[j] = t; } return A; };
+    const buckets = [[], [], [], [], []];
+    list.forEach(m => buckets[tier(m)].push(m));
+    const out = [];
+    buckets.forEach(b => shuf(b).forEach(m => { if (out.length < (max || 8)) out.push(m); }));
+    return out;
+  }
+
   function dailyDeckPool(){
     const st = S.getState(); const today = U.todayKey();
     const doneToday = m => (m.reviewLog || []).some(r => r.date === today);
-    const pool = st.mistakes.filter(m => !doneToday(m));
-    const priority = [];
-    const add = m => { if (priority.length < 8 && !priority.some(x => x.id === m.id)) priority.push(m); };
-    pool.filter(m => m.nextReview && m.nextReview <= today).forEach(add);
-    pool.filter(m => m.status === "new" || m.status === "review").forEach(add);
-    pool.filter(m => (m.reviewLog || []).filter(r => r.correct === false).length >= 2).forEach(add);
-    pool.forEach(add);
-    const out = priority.slice(0, 8);
-    for (let i = out.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); const t = out[i]; out[i] = out[j]; out[j] = t; }
-    return out;
+    return smartOrder(st.mistakes.filter(m => !doneToday(m)), 8);
   }
 
   function mistakeCard(m){
@@ -433,6 +495,7 @@ window.App = window.App || {};
       '</div>' +
       '<div class="mistake-q">' + U.esc(m.question) + '</div>' +
       UI.qImg(m.imageUrl) +
+      mistakeMasteryRow(m) +
       (isMcq ?
         '<div style="display:flex;flex-direction:column;gap:5px;margin:6px 0">' +
           (m.options || []).map((o, i) => {
@@ -458,9 +521,24 @@ window.App = window.App || {};
     '</div>';
   }
 
+  /* شريط درجة الإتقان + شارة تكرار الخطأ — الأخطاء المتكررة تبرز بصريًا */
+  function mistakeMasteryRow(m){
+    const mastery = S.reviewMastery(m);
+    const rep = (m.reviewLog || []).filter(r => r.correct === false).length;
+    return '<div style="display:flex;align-items:center;gap:8px;margin:8px 0">' +
+      '<span class="muted small" style="flex:none">الإتقان <b class="num">' + mastery + '%</b></span>' +
+      '<div style="flex:1">' + UI.bar(mastery, { thin: true }) + '</div>' +
+      (rep >= 2 ? '<span class="badge red">' + I.get("zap", 11) + 'تكرر ' + rep + ' مرات</span>' : '') +
+    '</div>';
+  }
+
   function bindErrors(root, st){
     root.querySelectorAll("[data-ef]").forEach(b => b.addEventListener("click", () => {
       errF.subject = b.dataset.ef;
+      App.Router.rerender();
+    }));
+    root.querySelectorAll("[data-efs]").forEach(b => b.addEventListener("click", () => {
+      errF.status = b.dataset.efs;
       App.Router.rerender();
     }));
     root.querySelectorAll("[data-err='add']").forEach(b => b.addEventListener("click", () => App.Modals.openMistakeModal()));
@@ -1068,7 +1146,7 @@ window.App = window.App || {};
         '<button class="btn primary" data-hw="add">' + I.get("plus", 15) + 'إضافة واجب</button>') + '</div>' : "");
 
     root.querySelectorAll("[data-hw='add']").forEach(b => b.addEventListener("click", () => App.Modals.openHwModal()));
-    root.querySelectorAll("[data-rv='now']").forEach(b => b.addEventListener("click", () => App.Views.launchReview(S.reviewQueue())));
+    root.querySelectorAll("[data-rv='now']").forEach(b => b.addEventListener("click", () => App.Views.launchReview(smartOrder(S.reviewQueue(), 12))));
     root.querySelectorAll("[data-hw='toggle']").forEach(b => b.addEventListener("click", () => S.toggleHw(b.dataset.id)));
     root.querySelectorAll("[data-hw='edit']").forEach(b => b.addEventListener("click", () => App.Modals.openHwModal(b.dataset.id)));
     root.querySelectorAll("[data-hw='del']").forEach(b => b.addEventListener("click", () => {
@@ -1128,6 +1206,8 @@ window.App = window.App || {};
     const selBlocks = st.blocks.filter(b => b.date === sel);
     const selNotes = st.notes.filter(n => U.dateKey(new Date(n.createdAt)) === sel && !n.archived);
     const monthTitle = U.MONTHS_AR[c.cursor.getMonth()] + " " + c.cursor.getFullYear();
+    const planSet = {};
+    (st.studyPlans || []).forEach(p => S.planSchedule(p).days.forEach(d => { planSet[d.date] = true; }));
 
     let gridMain = "";
     if (c.view === "month" || c.view === "week"){
@@ -1153,6 +1233,7 @@ window.App = window.App || {};
         g += '<div class="cal-cell ' + (other ? "other" : "") + (k === U.todayKey() ? " today" : "") + (k === sel ? " selected" : "") + '" data-cal="' + k + '" role="button" tabindex="0">' +
           '<div class="cal-num">' + d.getDate() + '</div>' +
           '<div class="cal-items">' +
+            (planSet[k] ? '<span class="cal-mini plan">' + I.get("calendar", 9) + 'خطة</span>' : '') +
             (hCnt ? '<span class="cal-mini hw">' + hCnt + ' واجب</span>' : '') +
             (tCnt ? '<span class="cal-mini task">' + tCnt + ' مهمة</span>' : '') +
             (sMin ? '<span class="cal-mini session">' + U.fmtDur(sMin) + '</span>' : '') +
@@ -1179,6 +1260,8 @@ window.App = window.App || {};
         '</div>' +
         gridMain +
       '</div>' +
+
+      planSection(st) +
 
       '<div class="card glass-1" style="margin-top:16px">' +
         '<div class="cal-day-title">' + (U.isToday(sel) ? "اليوم" : U.fmtDate(sel, { dayName: true, year: true })) +
@@ -1217,6 +1300,71 @@ window.App = window.App || {};
     return out.join("");
   }
 
+  function planSection(st){
+    const plans = st.studyPlans || [];
+    const head = '<div class="card-title">' + I.get("calendar", 17) + 'خطط مذاكرتك <span class="ct-sub">Study Plans</span></div>';
+    if (!plans.length){
+      return '<div class="card glass-1" style="margin-top:16px">' + head +
+        '<div class="mission-item"><div class="mi-txt muted">' + I.get("calendar2", 14) +
+        ' عندك امتحان؟ حدّد المادة والتاريخ وعدد الفصول، وسيوزّع الموقع المذاكرة يومًا بيوم وفق وقتك.</div>' +
+        '<button class="btn primary sm" data-plan="add">' + I.get("plus", 14) + 'إنشاء مخطط</button></div></div>';
+    }
+    return '<div class="card glass-1" style="margin-top:16px">' + head +
+      '<button class="btn sm primary" data-plan="add" style="margin:10px 0">' + I.get("plus", 14) + 'مخطط جديد</button>' +
+      '<div style="display:flex;flex-direction:column;gap:10px">' + plans.map(planCard).join("") + '</div></div>';
+  }
+
+  function planCard(p){
+    const subj = D.subjectById(p.subject);
+    const sched = S.planSchedule(p);
+    const until = U.daysBetween(U.todayKey(), p.examDate);
+    const rows = sched.days.slice(0, 10).map(d =>
+      '<div class="calitem-row" style="padding:6px 10px">' +
+        '<span class="small num" style="min-width:64px;flex:none">' + U.fmtDate(d.date, { short: true }) + '</span>' +
+        '<span style="flex:1">' + U.esc(d.chapterTitle) + '</span>' +
+        (d.done ? '<span class="badge emerald">' + I.get("check", 11) + 'أُنجز</span>' : '<span class="small num muted">' + U.fmtDur(d.doneMin) + ' من ' + U.fmtDur(d.targetMin) + '</span>') +
+      '</div>').join("");
+    return '<div class="plan-card">' +
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+        '<span class="chip" style="color:' + subj.accent + '">' + I.subj(subj, 13) + ' ' + subj.name + '</span>' +
+        '<span class="muted small">امتحان ' + U.fmtDate(p.examDate, { short: true }) + (until >= 0 ? ' (بعد ' + until + ' يوم)' : '') + '</span>' +
+        '<span class="badge neutral">' + p.chapters + ' فصول</span>' +
+        '<span class="badge ' + (sched.donePct >= 100 ? "emerald" : "gold") + '">' + sched.donePct + '% من الوقت المخطط</span>' +
+        '<button class="icon-btn" data-plan="del" data-id="' + p.id + '" title="حذف المخطط" aria-label="حذف المخطط">' + I.get("trash", 14) + '</button>' +
+      '</div>' +
+      '<div style="margin-top:4px">' + UI.bar(sched.donePct, { thin: true, gold: sched.donePct >= 100 }) + '</div>' +
+      '<div class="plan-sched">' + rows + (sched.days.length > 10 ? '<span class="muted small">+ ' + (sched.days.length - 10) + ' أيام أخرى…</span>' : '') + '</div>' +
+    '</div>';
+  }
+
+  function openPlanModal(){
+    const chips = D.subjects.filter(s => s.id !== "general").map((s, i) =>
+      '<button type="button" class="chip' + (i === 0 ? " active" : "") + '" data-psubj="' + s.id + '">' + I.subj(s, 13) + ' ' + s.name + '</button>').join("");
+    UI.openModal(UI.modalShell(I.get("calendar", 18) + ' مخطط دراسة جديد',
+      '<div class="field"><label>المادة <span class="req">*</span></label><div class="chips" id="plan-subjs">' + chips + '</div></div>' +
+      '<div class="field"><label>تاريخ الامتحان <span class="req">*</span></label><input type="date" class="input" id="plan-date" value="' + U.addDaysKey(U.todayKey(), 7) + '"></div>' +
+      '<div class="grid cols-2" style="gap:10px">' +
+        '<div class="field"><label>عدد الفصول</label><input type="number" class="input" id="plan-chapters" min="1" max="60" value="5"></div>' +
+        '<div class="field"><label>الوقت اليومي (دقيقة)</label><input type="number" class="input" id="plan-min" min="10" max="480" step="10" value="60"></div>' +
+      '</div>',
+      '<button class="btn ghost" data-close>إلغاء</button><button class="btn primary" id="plan-create">' + I.get("check", 14) + 'إنشاء المخطط</button>'));
+    document.querySelectorAll("#plan-subjs .chip").forEach(c => c.addEventListener("click", () => {
+      document.querySelectorAll("#plan-subjs .chip").forEach(x => x.classList.remove("active"));
+      c.classList.add("active");
+    }));
+    document.getElementById("plan-create").addEventListener("click", () => {
+      const subj = (document.querySelector("#plan-subjs .chip.active") || document.querySelector("#plan-subjs .chip")).dataset.psubj;
+      const dv = document.getElementById("plan-date").value;
+      const ch = Math.max(1, +document.getElementById("plan-chapters").value || 5);
+      const mn = Math.max(10, +document.getElementById("plan-min").value || 60);
+      if (!dv || dv <= U.todayKey()){ UI.toast("اختر تاريخ امتحان قادم بعد اليوم.", "error", "info"); return; }
+      S.addStudyPlan({ subject: subj, examDate: dv, chapters: ch, dailyMinutes: mn });
+      UI.closeModal();
+      UI.toast("أُنشئ المخطط ووُزّعت الفصول على الأيام.", "success", "check");
+      App.Router.rerender();
+    });
+  }
+
   function bindCalendar(root, st){
     const c = calState;
     root.querySelectorAll("[data-cal]").forEach(b => b.addEventListener("click", () => {
@@ -1232,6 +1380,11 @@ window.App = window.App || {};
     root.querySelectorAll("[data-calmove]").forEach(b => b.addEventListener("click", () => {
       S.rescheduleTask(b.dataset.calmove, U.tomorrowKey());
       UI.toast("نُقلت المهمة إلى غدًا.", "gold", "calendar");
+    }));
+    root.querySelectorAll("[data-plan='add']").forEach(b => b.addEventListener("click", () => openPlanModal()));
+    root.querySelectorAll("[data-plan='del']").forEach(b => b.addEventListener("click", () => {
+      const id = b.dataset.id;
+      UI.dangerConfirm("حذف المخطط", "سيُحذف تقسيم المذاكرة لهذه المادة.", "حذف", () => { S.deleteStudyPlan(id); UI.toast("حُذف المخطط.", "gold", "trash"); });
     }));
     root.querySelectorAll("[data-cal]").forEach(b => {});
   }

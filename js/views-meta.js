@@ -223,7 +223,36 @@ window.App = window.App || {};
     const s = st.settings;
     root.innerHTML = renderSettings(st, s);
     bindSettings(root, st, s);
+    bindConn(root);
   }, { rerender: true, title: "الإعدادات" });
+
+  let connBound = false;
+  function bindConn(root){
+    function apply(online){
+      const badge = root.querySelector("#conn-badge");
+      const txt = root.querySelector("#conn-state");
+      if (!badge || !txt) return;
+      badge.textContent = online ? "متصل" : "غير متصل";
+      badge.className = "badge " + (online ? "emerald" : "amber");
+      txt.textContent = online
+        ? "تُرفع التغييرات تلقائيًا إلى السحابة عند الحفظ."
+        : "أنت غير متصل — ستُزامن البيانات تلقائيًا عند عودة الإنترنت.";
+    }
+    apply((typeof navigator !== "undefined") ? !!navigator.onLine : true);
+    if (connBound) return;
+    connBound = true;
+    function patch(online){
+      const badge = document.getElementById("conn-badge");
+      const txt = document.getElementById("conn-state");
+      if (!badge || !txt) return;
+      badge.textContent = online ? "متصل" : "غير متصل";
+      badge.className = "badge " + (online ? "emerald" : "amber");
+      txt.textContent = online
+        ? "تُرفع التغييرات تلقائيًا إلى السحابة عند الحفظ."
+        : "أنت غير متصل — ستُزامن البيانات تلقائيًا عند عودة الإنترنت.";
+    }
+    if (U.on) U.on("conn-status", p => patch(!!(p && p.online)));
+  }
 
   function renderSettings(st, s){
     const seg = (val, opts, target) =>
@@ -260,6 +289,8 @@ window.App = window.App || {};
     const studyBody =
       '<div class="study-cols">' +
         srow("الهدف اليومي", "ساعات التركيز المستهدفة", step("set-goal", s.dailyGoalMinutes / 60, "ساعة", 1, 12)) +
+        srow("الهدف الأسبوعي", "ساعات الدراسة المستهدفة أسبوعيًا", step("set-week-goal", s.weeklyGoalMinutes / 60, "ساعة", 7, 84)) +
+        srow("الهدف الشهري", "ساعات الدراسة المستهدفة شهريًا", step("set-month-goal", s.monthlyGoalMinutes / 60, "ساعة", 30, 360)) +
         srow("مدة البومودورو", "دقيقة دراسة لكل جولة", step("set-pomo", s.pomodoroStudy, "دقيقة", 5, 120)) +
         srow("الاستراحة القصيرة", "بعد كل جولة", step("set-break", s.pomodoroBreak, "دقيقة", 1, 30)) +
         srow("الاستراحة الطويلة", "بعد عدة جولات", step("set-long", s.pomodoroLong, "دقيقة", 5, 60)) +
@@ -305,7 +336,7 @@ window.App = window.App || {};
       '<input type="file" id="set-file" accept="application/json,.json" hidden>' +
       srow("بيانات التطبيق", "تحميل عينة لفهم المنصة", '<button class="btn sm" data-set="sample">عينة</button>');
 
-    const syncBody =
+const syncBody =
       (function(){
         const sy = (App.Sync && App.Sync.user) || null;
         const stt = (App.Sync && App.Sync.ready) ? "" : '<span class="muted small">جارٍ الاتصال…</span>';
@@ -317,7 +348,9 @@ window.App = window.App || {};
             '<button class="btn sm danger" data-set="sync-out">قطع الاتصال</button>') +
           srow("المزامنة", "تزامن فوري بين أجهزتك",
             '<button class="btn sm ghost" data-set="sync-now">مزامنة الآن</button>') + stt;
-      })();
+      })() +
+      srow("حالة الاتصال", '<span id="conn-state" class="muted small">تحضير…</span>',
+        '<span class="badge neutral" id="conn-badge">جارٍ الفحص</span>');
 
     const dangerBody =
       srow("إعادة ضبط التطبيق", "حذف كل المهام والجلسات والملاحظات والإحصائيات",
@@ -433,12 +466,14 @@ window.App = window.App || {};
     }));
     const studySave = () => {
       const g = Math.min(12, Math.max(1, +document.getElementById("set-goal").value || 4));
+      const wg = Math.min(84, Math.max(7, +document.getElementById("set-week-goal").value || 28));
+      const mg = Math.min(360, Math.max(30, +document.getElementById("set-month-goal").value || 120));
       const p = Math.min(120, Math.max(5, +document.getElementById("set-pomo").value || 25));
       const br = Math.min(30, Math.max(1, +document.getElementById("set-break").value || 5));
       const lg = Math.min(60, Math.max(5, +document.getElementById("set-long").value || 20));
       const se = Math.min(10, Math.max(1, +document.getElementById("set-sess").value || 4));
       const fo = Math.min(180, Math.max(10, +document.getElementById("set-focus").value || 30));
-      S.updateSettings({ dailyGoalMinutes: g * 60, pomodoroStudy: p, pomodoroBreak: br, pomodoroLong: lg, pomodoroSessions: se, focusDuration: fo });
+      S.updateSettings({ dailyGoalMinutes: g * 60, weeklyGoalMinutes: wg * 60, monthlyGoalMinutes: mg * 60, pomodoroStudy: p, pomodoroBreak: br, pomodoroLong: lg, pomodoroSessions: se, focusDuration: fo });
     };
     root.querySelectorAll("[data-st]").forEach(b => b.addEventListener("click", () => {
       const inp = document.getElementById(b.dataset.st);
@@ -447,7 +482,7 @@ window.App = window.App || {};
       inp.value = String(Math.min(+inp.max, Math.max(+inp.min, v)));
       studySave();
     }));
-    ["set-goal","set-pomo","set-break","set-long","set-sess","set-focus"].forEach(id => {
+    ["set-goal","set-week-goal","set-month-goal","set-pomo","set-break","set-long","set-sess","set-focus"].forEach(id => {
       const inp = document.getElementById(id);
       if (inp) inp.addEventListener("change", studySave);
     });
@@ -496,7 +531,17 @@ window.App = window.App || {};
           '</div>' +
           '<div class="muted small">المستخدم: ' + U.esc(p.user) + '</div>',
           "استيراد الآن", () => {
-            try { S.importData(String(reader.result)); UI.toast("تم استيراد البيانات بنجاح.", "success", "check"); App.Router.rerender(); }
+            try {
+              S.importData(String(reader.result));
+              UI.toast("تم استيراد البيانات بنجاح.", "success", "check");
+              App.Router.rerender();
+              if (App.Sync && App.Sync.syncNow){
+                App.Sync.syncNow().then(res => {
+                  if (res && res.ok) UI.toast("رُفعت البيانات المستوردة إلى السحابة.", "success", "cloud");
+                  else if (res && !res.ok) UI.toast(res.error || "المزامنة التلقائية غير متاحة — سيتم الرفع عند اتصالك.", "gold", "cloud");
+                }).catch(() => {});
+              }
+            }
             catch(err){ UI.toast("تعذر استيراد البيانات. حاول مرة أخرى.", "error", "info"); }
           }, {});
       };

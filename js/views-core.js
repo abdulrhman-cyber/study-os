@@ -46,6 +46,8 @@ App.Views = App.Views || {};
     const hwSoon = st.homework.filter(h => !h.completed && h.deadline === U.addDaysKey(today, 1));
     const mistakesDue = S.reviewQueue();
     const hunger = (st.settings.dailyGoalMinutes - (daily.studyMin || 0));
+    const wg = S.goalStatus("week");
+    const mg = S.goalStatus("month");
 
     root.innerHTML =
       '<div class="page-head">' +
@@ -74,6 +76,14 @@ App.Views = App.Views || {};
         '</div>' +
         '<div class="hero-ring">' +
           '<div class="ring-wrap" id="goal-ring">' + UI.ring(70, 11, ts.goalPct) + UI.ringCenter(ts.goalPct + "%", "هدف اليوم") + '</div>' +
+          '<div class="goal-week">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+              '<span class="small" style="color:var(--text-2);font-weight:700">أسبوعك <span class="num">' + wg.pct + '%</span></span>' +
+              (wg.behind ? '<span class="badge red">' + I.get("zap", 10) + 'متأخر عن هدف أسبوعك</span>' : '') +
+            '</div>' +
+            UI.bar(wg.pct, { thin: true, gold: true }) +
+            '<span class="small muted num" style="display:block;text-align:left">' + U.fmtDur(wg.done) + ' / ' + U.fmtDur(wg.goal) + '</span>' +
+          '</div>' +
         '</div>' +
       '</div>' +
 
@@ -103,8 +113,11 @@ App.Views = App.Views || {};
             UI.statCard("homework", hwToday.length ? hwToday.length + " اليوم" : (hwSoon.length ? "غدًا" : "لا شيء"), "واجبات قادمة") +
             UI.statCard("flame", streak, "Streak") +
             UI.statCard("xp", U.fmtNum(st.xp), "XP · المستوى " + level.level, "gold") +
+            UI.statCard("calendar", wg.pct + "%", "هدف الأسبوع") +
+            UI.statCard("target", mg.pct + "%", "هدف الشهر") +
           '</div>' +
           yesterdaySummary(st) +
+          streakCalendar(st) +
           subjectsSnap(st) +
           activityCard(st) +
           achievementsSnap(st) +
@@ -225,31 +238,62 @@ App.Views = App.Views || {};
     '</div>';
   }
 
+  function streakCalendar(st){
+    const now = new Date();
+    const y = now.getFullYear(), mo = now.getMonth();
+    const first = new Date(y, mo, 1);
+    const daysInMonth = new Date(y, mo + 1, 0).getDate();
+    const startPad = (first.getDay() + 6) % 7; // أسبوع يبدأ الإثنين
+    const todayK = U.todayKey();
+    const minMap = {};
+    (st.blocks || []).forEach(b => { if (b && b.minutes) minMap[b.date] = (minMap[b.date] || 0) + (b.minutes || 0); });
+    const dows = ["ح","ن","ث","ر","خ","ج","س"];
+    let cells = dows.map(d => '<div class="sc-dow">' + d + "</div>").join("");
+    for (let i = 0; i < startPad; i++) cells += '<div class="sc-day day-blank"></div>';
+    for (let d = 1; d <= daysInMonth; d++){
+      const k = U.dateKey(new Date(y, mo, d));
+      const min = minMap[k] || 0;
+      const lvl = min >= 180 ? 4 : min >= 90 ? 3 : min >= 30 ? 2 : min > 0 ? 1 : 0;
+      const cls = "sc-day" + (lvl ? " l" + lvl : "") + (k === todayK ? " today" : "") + (k > todayK ? " future" : "");
+      cells += '<div class="' + cls + '" title="' + k + (min ? " — " + U.fmtDur(min) : "") + '"></div>';
+    }
+    return '<div class="card glass-1">' +
+      '<div class="card-title">' + I.get("flame", 17) + 'سلسلتك هذا الشهر <span class="ct-sub">' + U.fmtDate(todayK) + "</span></div>" +
+      '<div class="streak-cal">' + cells + "</div>" +
+      '<div style="display:flex;justify-content:space-between;margin-top:10px;font-size:11px;color:var(--text-3);flex-wrap:wrap;gap:4px">' +
+        '<span>' + I.get("flame", 12) + "السلسلة: " + D.streakOf(st) + " يوم</span>" +
+        "<span>أطول سلسلة: " + D.longestStreakOf(st) + "</span>" +
+        "<span>أقل ← أكثر</span>" +
+      "</div>" +
+    "</div>";
+  }
+
   function subjectsSnap(st){
     const list = D.subjects.filter(s => s.id !== "general");
+    const sp = S.subjectProgress(st);
     return '<div class="card glass-1">' +
       '<div class="card-title">' + I.get("book", 17) + 'المواد <span class="ct-sub" style="cursor:pointer" data-go="subjects">عرض الكل ←</span></div>' +
       list.map(s => {
-        const mins = st.blocks.filter(b => b.subject === s.id).reduce((a, b) => a + b.minutes, 0);
-        const pct = Math.min(100, Math.round(mins / (s.hourGoal * 60) * 100));
+        const d = sp[s.id] || { done: 0, goal: 0, pct: 0 };
+        const reached = d.goal > 0 && d.done >= d.goal;
         return '<div class="mission-item" style="cursor:pointer" data-subj="' + s.id + '">' +
           '<div class="subj-ic" style="width:36px;height:36px;font-size:17px;margin:0;color:' + s.accent + ';border-color:color-mix(in srgb,' + s.accent + ' 30%, transparent)">' + I.subj(s, 17) + '</div>' +
-          '<div class="mi-txt" style="width:100%"><div style="display:flex;justify-content:space-between"><b style="font-size:13px">' + s.name + '</b><span class="small muted num" style="direction:ltr">' + U.fmtDur(mins) + '</span></div><div style="margin-top:5px">' + UI.bar(pct) + '</div></div>' +
+          '<div class="mi-txt" style="width:100%"><div style="display:flex;justify-content:space-between"><b style="font-size:13px">' + s.name + '</b><span class="small muted num" style="direction:ltr">' + U.fmtDur(d.done) + (d.goal ? " / " + (d.goal / 60) + "س" : "") + (reached ? ' <span class="badge emerald">' + I.get("check", 10) + 'حقّقت هدفه</span>' : "") + '</span></div><div style="margin-top:5px">' + UI.bar(d.pct, reached ? { gold: true } : {}) + '</div></div>' +
         '</div>';
       }).join("") +
     '</div>';
   }
 
   function activityCard(st){
-    const log = st.activityLog.slice(0, 8);
+    const today = U.todayKey();
+    const log = S.studyTimeline(st, today);
     return '<div class="card glass-1">' +
-      '<div class="card-title">' + I.get("clock", 17) + 'آخر النشاطات <span class="ct-sub">Recent</span></div>' +
-      (log.length ? log.map(a => {
-        const t = new Date(a.ts);
-        return '<div class="activity-item"><div class="act-ic">' + I.get(a.icon || "star", 15) + '</div>' +
-          '<div class="act-txt">' + a.txt + '</div>' +
-          '<div class="act-time num">' + U.fmtTimeHM(t) + '</div></div>';
-      }).join("") : '<p class="muted small">نشاطك سيظهر هنا عندما تبدأ.</p>') +
+      '<div class="card-title">' + I.get("clock", 17) + 'سجل نشاط اليوم <span class="ct-sub">Timeline</span></div>' +
+      (log.length ? log.map(a =>
+        '<div class="activity-item"><span class="act-time num" style="flex:none;min-width:42px">' + a.timeLabel + '</span>' +
+        '<div class="act-ic">' + I.get(a.icon, 15) + '</div>' +
+        '<div class="act-txt">' + U.esc(a.txt) + '</div></div>').join("")
+        : '<p class="muted small">سجّل جلسة أو أنهِ مهمة ليظهر نشاطك الزمني هنا.</p>') +
     '</div>';
   }
 

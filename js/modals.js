@@ -364,17 +364,20 @@ App.Modals = (function () {
       });
       add("إجراءات سريعة", ac);
       const tk = [];
-      st.tasks.slice(0, 5).forEach(t => { if (!filter || t.title.toLowerCase().indexOf(filter) >= 0) tk.push({ ic: "tasks", title: t.title, sub: "مهمة · " + D.subjName(t.subject), route: "todo" }); });
+      st.tasks.slice(0, 50).forEach(t => { if (!filter || (t.title + " " + (t.desc || "") + " " + (t.lesson || "") + " " + D.subjName(t.subject)).toLowerCase().indexOf(filter) >= 0) tk.push({ ic: "tasks", kind: "task", id: t.id, title: t.title, sub: "مهمة · " + D.subjName(t.subject), route: "todo" }); });
       add("المهام", tk);
       const hw = [];
-      st.homework.slice(0, 5).forEach(h => { if (!filter || h.title.toLowerCase().indexOf(filter) >= 0) hw.push({ ic: "homework", title: h.title, sub: "واجب · " + D.subjName(h.subject), route: "homework" }); });
+      st.homework.slice(0, 50).forEach(h => { if (!filter || (h.title + " " + (h.lesson || "") + " " + (h.desc || "") + " " + D.subjName(h.subject) + " " + (h.priority || "")).toLowerCase().indexOf(filter) >= 0) hw.push({ ic: "homework", kind: "homework", id: h.id, title: h.title, sub: "واجب · " + D.subjName(h.subject), route: "homework" }); });
       add("الواجبات", hw);
       const nt = [];
-      st.notes.slice(0, 5).forEach(n => { if (!filter || (n.title + " " + n.content).toLowerCase().indexOf(filter) >= 0) nt.push({ ic: "notes", title: n.title, sub: "ملاحظة", route: "notes" }); });
+      st.notes.slice(0, 50).forEach(n => { if (!filter || (n.title + " " + n.content + " " + n.tags.join(" ")).toLowerCase().indexOf(filter) >= 0) nt.push({ ic: "notes", kind: "note", id: n.id, title: n.title.length > 60 ? n.title.slice(0, 60) + "…" : n.title, sub: "ملاحظة · " + D.subjName(n.subject), route: "notes" }); });
       add("الملاحظات", nt);
       const mi = [];
-      st.mistakes.slice(0, 5).forEach(x => { if (!filter || x.question.toLowerCase().indexOf(filter) >= 0) mi.push({ ic: "errors", title: x.question.slice(0, 60), sub: "خطأ · " + D.subjName(x.subject), route: "errors" }); });
+      st.mistakes.slice(0, 50).forEach(x => { if (!filter || (x.question + " " + (x.notes || "") + " " + D.subjName(x.subject)).toLowerCase().indexOf(filter) >= 0) mi.push({ ic: "errors", kind: "mistake", id: x.id, title: x.question.length > 60 ? x.question.slice(0, 60) + "…" : x.question, sub: "خطأ · " + D.subjName(x.subject), route: "errors" }); });
       add("الأخطاء", mi);
+      const ss = [];
+      st.blocks.slice(0, 50).forEach(b => { if (!filter || (b.title + " " + D.subjName(b.subject)).toLowerCase().indexOf(filter) >= 0) ss.push({ ic: "clock", title: b.title || D.subjName(b.subject), sub: "جلسة · " + U.fmtDate(b.date, { short: true }) + " · " + U.fmtDur(b.minutes), route: "timer" }); });
+      add("الجلسات", ss);
       const flat = [];
       groups.forEach(g => flat.push.apply(flat, g.items));
       return { groups: groups, flat: flat };
@@ -398,13 +401,21 @@ App.Modals = (function () {
       list.innerHTML = html;
       list.querySelectorAll(".pl-item").forEach(b => b.addEventListener("click", () => {
         const r = got.flat[+b.dataset.i];
+        UI.closePalette();
+        if (r && r.id){
+          if (r.kind === "task") App.Modals.openTaskModal(r.id);
+          else if (r.kind === "homework") App.Modals.openHwModal(r.id);
+          else if (r.kind === "note") App.Modals.openNoteModal(r.id);
+          else if (r.kind === "mistake") App.Modals.openMistakeModal(r.id);
+          else if (r.route) App.Router.go(r.route);
+          return;
+        }
         if (r.route) App.Router.go(r.route);
         else if (r.act === "task") App.Modals.openTaskModal();
         else if (r.act === "homework") App.Modals.openHwModal();
         else if (r.act === "note") App.Modals.openNoteModal();
         else if (r.act === "mistake") App.Modals.openMistakeModal();
         else if (r.act === "session") UI.startSessionFlow();
-        UI.closePalette();
       }));
     }
     input.addEventListener("input", () => render(input.value));

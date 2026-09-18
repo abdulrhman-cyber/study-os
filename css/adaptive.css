@@ -204,3 +204,7 @@ html[dir="ltr"] .fab-wrap { right: max(26px, env(safe-area-inset-right)); left: 
 /* ── 10) تطبيق أندرويد: إخفاء اسم الصفحة من الشريط العلوي (يكفي العنوان داخل الصفحة) ── */
 html.is-native .tb-title { display: none; }
 html.is-native .tb-start { gap: 0; }
+
+/* ── 11) عنوان الشريط العلوي: أي حجم شاشة — إن لم يَسَع مكانه كاملًا (أو على
+   الشاشات الصغيرة) نُخفيه كليًا. لا نقصّ ولا نقاط ولا التفاف ولا ضغط لعناصر. */
+.tb-title.tb-title-hidden { display: none; }

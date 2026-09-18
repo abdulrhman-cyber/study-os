@@ -269,7 +269,7 @@ body.side-collapsed .side-nav-item[data-route="dashboard"],body.side-collapsed .
 .tb-start{display:flex;align-items:center;gap:10px;min-width:0}
 .menu-btn{display:none}
 .tb-title{min-width:0}
-.tb-title h1{font-size:1.15rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-title h1{font-size:1.15rem;font-weight:800;white-space:nowrap}
 .crumb{font-size:.74rem;color:var(--text-3);margin-top:2px}
 .tb-search{flex:1;max-width:420px;margin-inline-start:auto;display:flex;align-items:center;gap:8px;background:var(--chip);border:1px solid var(--line-strong);border-radius:999px;padding:8px 14px;color:var(--text-2);font-size:.88rem;transition:all 180ms;cursor:pointer}
 html[data-theme="dark"] .tb-search{background:rgba(255,255,255,.035);border-color:rgba(255,255,255,.07)}
@@ -946,7 +946,7 @@ body.theatre-on .theatre{visibility:visible}
 [hidden]{display:none!important}
 
 /* â”€â”€ Topbar title (JS sets textContent on #tb-title) â”€â”€â”€â”€â”€â”€â”€â”€ */
-.tb-title{min-width:0;font-size:1.15rem;font-weight:800;color:var(--text-h,var(--text));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+.tb-title{min-width:0;font-size:1.15rem;font-weight:800;color:var(--text-h,var(--text));white-space:nowrap;line-height:1.35}
 .menu-btn{display:none!important}
 .collapse-btn{display:flex}
 
@@ -1287,3 +1287,18 @@ html[data-theme="light"] .toast{background:rgba(255,255,255,.92);border-color:rg
   .lightbox{padding:12px}
   .lb-close{top:12px;inset-inline-end:12px;width:38px;height:38px}
 }
+
+/* ── Streak calendar (Dashboard) ── */
+.streak-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;direction:ltr;margin-top:10px}
+.streak-cal .sc-dow{font-size:10px;color:var(--text-3);text-align:center;font-weight:800;padding:2px 0}
+.streak-cal .sc-day{aspect-ratio:1;border-radius:6px;background:var(--surface-2);border:1px solid var(--line);min-height:20px;position:relative}
+.streak-cal .sc-day.l1{background:rgba(111,169,155,.22);border-color:rgba(111,169,155,.3)}
+.streak-cal .sc-day.l2{background:rgba(111,169,155,.45);border-color:rgba(111,169,155,.5)}
+.streak-cal .sc-day.l3{background:#2F7568;border-color:rgba(111,169,155,.65)}
+.streak-cal .sc-day.l4{background:var(--gold-grad);border-color:#e8cf98}
+.streak-cal .sc-day.today{outline:2px solid var(--gold-2);outline-offset:1px}
+.streak-cal .sc-day.future{opacity:.3}
+.streak-cal .sc-day.day-blank{background:transparent;border-color:transparent}
+.cal-mini.plan{background:rgba(214,183,122,.25);color:var(--gold-2);border:1px dashed rgba(232,207,152,.5)}
+.plan-card{padding:12px;border-radius:var(--r-md);border:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.plan-card .plan-sched{display:flex;flex-direction:column;gap:5px;max-height:260px;overflow:auto;margin-top:4px}

@@ -30,6 +30,21 @@ window.App = window.App || {};
   }
   function applyThemeFromSystem(){ applyTheme(); }
 
+  /* عنوان الشريط العلوي (لا صغير المحتوى): نحكم على المساحة الفعلية لا على
+     breakpoint وحيد. لا نعرض العنوان إلا إن وسعه مكانه كاملًا دون قصّ أو نقاط —
+     وإلا نخفيه بالكامل. الشاشات الصغيرة (≤480) تُخفيه دائمًا. عنوان الصفحة
+     داخل المحتوى (.page-title) لا يُمسّ نهائيًا. */
+  function fitTopbarTitle(){
+    const el = $("tb-title");
+    if (!el) return;
+    if (document.documentElement.classList.contains("is-native")){ el.classList.remove("tb-title-hidden"); return; }
+    el.classList.remove("tb-title-hidden");            // نعيد القياس وهو مرئي
+    const fits = el.scrollWidth <= el.clientWidth;      // مساحة فعلية في الشريط
+    el.classList.toggle("tb-title-hidden", window.innerWidth <= 480 || !fits);
+  }
+  window.addEventListener("resize", fitTopbarTitle);
+  window.addEventListener("load", fitTopbarTitle);
+
   /* يعلّم الصفحة أنها تعمل داخل تطبيق أندرويد (Capacitor) لإخفاء اسم الصفحة من الشريط العلوي */
   function markNative(){
     const isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === "function" && window.Capacitor.isNativePlatform());
@@ -83,6 +98,7 @@ window.App = window.App || {};
     $("side-user-grade").textContent = st.user.grade || "ثانية ثانوي — بكالوريا";
 
     $("tb-title").textContent = App.Views.titles[routeN] || routeN;
+    fitTopbarTitle();
     $("tb-streak").innerHTML = I.get("flame", 14) + '<b class="num">' + D.streakOf(st) + '</b>';
     $("tb-xp").innerHTML = I.get("xp", 14) + '<b class="num">' + U.fmtNum(st.xp) + '</b>';
     $("tb-theme").innerHTML = st.settings.theme === "light" ? I.get("moon", 18) : I.get("sun", 18);
