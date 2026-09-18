@@ -219,3 +219,30 @@ html.is-native .tb-start { gap: 0; }
 /* ── 11) عنوان الشريط العلوي: أي حجم شاشة — إن لم يَسَع مكانه كاملًا (أو على
    الشاشات الصغيرة) نُخفيه كليًا. لا نقصّ ولا نقاط ولا التفاف ولا ضغط لعناصر. */
 .tb-title.tb-title-hidden { display: none; }
+
+/* ── 12) المساعد الذكي: تجاوب إضافي للشاشات الضيقة ── */
+@media (max-width: 640px) {
+  .ai-msg { max-width: 96%; }
+}
+@media (max-width: 400px) {
+  .ai-msg.ai { max-width: 100%; }
+  .ai-bubble { font-size: 13.5px; padding: 10px 12px; }
+  .ai-quick { grid-template-columns: 1fr; gap: 8px; }
+  .ai-logo { width: 72px; height: 72px; border-radius: 22px; }
+  .ai-w-title { font-size: 21px; }
+  .ai-welcome { padding: 16px 4px 30px; }
+  .ai-input { padding: 6px; gap: 8px; }
+  .ai-send { width: 40px; height: 40px; }
+  .ai-av { width: 28px; height: 28px; border-radius: 9px; font-size: 13px; }
+}
+@media (max-width: 360px) {
+  .ai-quick .quick { font-size: 12px; padding: 12px 10px; }
+  .ai-w-sub { font-size: 12px; }
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .ai-welcome { padding: 12px 6px 20px; gap: 4px; }
+  .ai-logo { width: 60px; height: 60px; border-radius: 18px; margin-bottom: 6px; }
+  .ai-logo svg { width: 30px !important; height: 30px !important; }
+  .ai-quick { grid-template-columns: repeat(4, 1fr); margin-top: 12px; }
+  .ai-quick .quick { padding: 10px 8px; }
+}

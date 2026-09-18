@@ -1302,3 +1302,60 @@ html[data-theme="light"] .toast{background:rgba(255,255,255,.92);border-color:rg
 .cal-mini.plan{background:rgba(214,183,122,.25);color:var(--gold-2);border:1px dashed rgba(232,207,152,.5)}
 .plan-card{padding:12px;border-radius:var(--r-md);border:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
 .plan-card .plan-sched{display:flex;flex-direction:column;gap:5px;max-height:260px;overflow:auto;margin-top:4px}
+
+/* ═══════════════════ AI ASSISTANT — صفحة المساعد الذكي ═══════════════════
+   تصميم متوافق مع هوية Study OS (نفس الزوايا/الظلال/الألوان/البطاقات).
+   عند تفعيل هذا المسار يُقفل تمرير واجهة الصفحة ويُمرَّر سجلّ المحادثة وحده،
+   فيبقى حقل الإدخال مثبّتًا أسفل الشاشة دائمًا (دون تجاوز للشاشات الضيقة). */
+body.ai-route .main{overflow:hidden}
+body.ai-route .content{height:100%;min-height:0;padding-bottom:0;gap:0}
+body.ai-route .view{height:100%;min-height:0;display:flex;flex-direction:column}
+body.ai-route #fab-wrap{display:none}
+
+.ai-page{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}
+.ai-chat{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:12px;padding:2px 2px 10px;scroll-behavior:smooth;overscroll-behavior:contain}
+.ai-chat::-webkit-scrollbar{width:6px}
+.ai-chat::-webkit-scrollbar-thumb{background:transparent;border-radius:99px}
+.ai-chat:hover::-webkit-scrollbar-thumb{background:rgba(214,183,122,.4)}
+
+/* ── رسائل المحادثة ── */
+.ai-msg{display:flex;align-items:flex-start;gap:9px;max-width:min(640px,92%);animation:page-in .3s var(--ease) both}
+.ai-msg.user{align-self:flex-end;flex-direction:row-reverse}
+.ai-av{flex:none;width:32px;height:32px;border-radius:11px;display:grid;place-items:center;font-size:15px;background:var(--surface-2);border:1px solid var(--line-strong);color:var(--gold-2);overflow:hidden}
+.ai-msg.ai .ai-av{color:var(--em-3);background:rgba(47,117,104,.14)}
+.ai-bubble{min-width:0;padding:11px 14px;border-radius:var(--r-lg);font-size:14px;line-height:1.85;background:var(--surface-2);border:1px solid var(--line);color:var(--text-2);word-break:break-word;white-space:normal}
+.ai-msg.user .ai-bubble{background:linear-gradient(160deg,var(--em-1),rgba(47,117,104,.75));border-color:rgba(111,169,155,.35);color:var(--text)}
+.ai-msg.err .ai-bubble{border-color:var(--red-line);background:var(--red-soft);color:var(--text-2)}
+.ai-msg.user.err .ai-bubble{background:var(--red-soft);color:var(--text-2)}
+.ai-tag{display:inline-block;font-size:10px;font-weight:900;color:var(--gold-2);margin-bottom:4px;padding:2px 8px;border-radius:99px;border:1px solid rgba(214,183,122,.25);background:rgba(214,183,122,.08)}
+.ai-retry{margin-top:8px}
+
+/* ── مؤشر "جاري التفكير" ── */
+.ai-msg.thinking .ai-bubble{display:inline-flex;gap:5px;align-items:center;padding:15px 18px}
+.ai-msg.thinking .t{width:7px;height:7px;border-radius:50%;background:var(--em-3);display:inline-block;animation:ai-blink 1.2s var(--ease) infinite}
+.ai-msg.thinking .t.i2{animation-delay:.2s}
+.ai-msg.thinking .t.i3{animation-delay:.4s}
+@keyframes ai-blink{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+
+/* ── شاشة الترحيب ── */
+.ai-welcome{margin:auto;max-width:560px;width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px;padding:24px 10px 40px}
+.ai-logo{width:86px;height:86px;border-radius:26px;display:grid;place-items:center;background:linear-gradient(160deg,var(--em-1),var(--em-3));color:#fff;border:1px solid rgba(232,207,152,.35);box-shadow:0 18px 40px -14px rgba(47,117,104,.7);margin-bottom:10px}
+.ai-w-title{font-size:24px;font-weight:900;letter-spacing:-.2px;background:linear-gradient(120deg,var(--text),var(--gold-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ai-w-name{font-size:13px;font-weight:800;color:var(--gold-2)}
+.ai-w-sub{font-size:13px;color:var(--text-3);max-width:420px;margin-top:2px}
+.ai-quick{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;width:100%;margin-top:20px}
+.ai-quick .quick{display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 12px;border-radius:var(--r-lg);border:1px solid var(--line-strong);background:var(--surface);color:var(--text-2);font-size:13px;font-weight:800;cursor:pointer;transition:all var(--t-fast);text-align:center}
+.ai-quick .quick:hover{border-color:var(--gold-2);background:var(--surface-2);color:var(--text);transform:translateY(-1px)}
+
+/* ── شريط الإدخال ── */
+.ai-inputbar{flex:none;display:flex;flex-direction:column;gap:6px}
+.ai-modebar{display:flex;align-items:center;justify-content:center;gap:8px}
+.ai-mode-chip{font-size:11px;font-weight:800;color:var(--em-3);background:rgba(47,117,104,.12);border:1px solid rgba(111,169,155,.28);padding:4px 12px;border-radius:99px;display:inline-flex;align-items:center;gap:6px}
+.ai-mode-clear{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);background:var(--surface-2);color:var(--text-3);display:grid;place-items:center;cursor:pointer;transition:all var(--t-fast)}
+.ai-mode-clear:hover{color:var(--danger-text);border-color:var(--red-line)}
+.ai-input{display:flex;align-items:flex-end;gap:10px;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r-lg);padding:8px;transition:border-color var(--t-fast),box-shadow var(--t-fast)}
+.ai-input:focus-within{border-color:var(--gold-2);box-shadow:0 0 0 3px rgba(214,183,122,.12)}
+.ai-input-ta{flex:1;min-width:0;border:none;background:transparent;resize:none;font-family:var(--font-ar);font-size:14.5px;line-height:1.7;color:var(--text);outline:none;padding:6px 4px;max-height:150px}
+.ai-input-ta::placeholder{color:var(--text-4)}
+.ai-send{flex:none;width:44px;height:44px;border-radius:14px;padding:0;display:grid;place-items:center}
+.ai-inputbar.busy .ai-send{opacity:.5;pointer-events:none}

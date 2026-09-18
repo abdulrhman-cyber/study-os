@@ -29,7 +29,8 @@ App.Data = (function () {
     { route: "analytics",     num: "09", name: "التحليلات",  en: "Analytics",        icon: "analytics" },
     { route: "errors",        num: "10", name: "بنك الأخطاء", en: "Error Bank",      icon: "errors" },
     { route: "achievements",  num: "11", name: "الإنجازات",  en: "Achievements",     icon: "achievements" },
-    { route: "notifications", num: "12", name: "التنبيهات",  en: "Notifications",    icon: "bell" }
+    { route: "notifications", num: "12", name: "التنبيهات",  en: "Notifications",    icon: "bell" },
+    { route: "ai-assistant", num: "13", name: "المساعد الذكي", en: "AI Assistant", icon: "robot" }
   ];
   const pageByRoute = {};
   navPages.forEach(p => pageByRoute[p.route] = p);

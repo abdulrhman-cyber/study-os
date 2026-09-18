@@ -515,6 +515,7 @@ window.App = window.App || {};
       (m.explanation ? '<div class="review-feedback good" style="margin:0"><b>لماذا؟</b> ' + U.esc(m.explanation) + '</div>' : '') +
       (m.reason ? '<div class="muted small" style="margin-top:6px">سبب الخطأ: ' + U.esc(m.reason) + '</div>' : '') +
       '<div class="mistake-actions">' +
+        '<button class="btn sm glass" data-err="ask" data-id="' + m.id + '">' + I.get("robot", 13) + 'اسأل المساعد</button>' +
         '<button class="btn sm ghost" data-err="edit" data-id="' + m.id + '">' + I.get("edit", 13) + 'تعديل</button>' +
         '<button class="btn sm danger" data-err="del" data-id="' + m.id + '">' + I.get("trash", 13) + '</button>' +
       '</div>' +
@@ -542,6 +543,9 @@ window.App = window.App || {};
       App.Router.rerender();
     }));
     root.querySelectorAll("[data-err='add']").forEach(b => b.addEventListener("click", () => App.Modals.openMistakeModal()));
+    root.querySelectorAll("[data-err='ask']").forEach(b => b.addEventListener("click", () => {
+      if (App.Assistant && App.Assistant.askAboutMistake) App.Assistant.askAboutMistake(b.dataset.id);
+    }));
     root.querySelectorAll("[data-err='edit']").forEach(b => b.addEventListener("click", () => App.Modals.openMistakeModal(b.dataset.id)));
     root.querySelectorAll("[data-err='del']").forEach(b => b.addEventListener("click", () => {
       const id = b.dataset.id;

@@ -81,7 +81,8 @@ window.App = window.App || {};
     ["الدراسة", ["subjects", "sessions", "timer"]],
     ["التنظيم", ["todo", "homework", "calendar", "notes"]],
     ["التحليل", ["analytics", "errors", "achievements"]],
-    ["النظام", ["notifications"]]
+    ["النظام", ["notifications"]],
+    ["المساعد", ["ai-assistant"]]
   ];
   function buildNav(){
     const nav = $("side-nav");
@@ -167,6 +168,7 @@ window.App = window.App || {};
   }
   function route(){
     const p = parseHash();
+    document.body.classList.toggle("ai-route", p.route === "ai-assistant");
     const ctx = current.ctx || {};
     if (p.date && /^\d{4}-\d{2}-\d{2}$/.test(p.date)) ctx.date = ctx.date || p.date;
     current.ctx = {};
