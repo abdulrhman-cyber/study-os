@@ -29,7 +29,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 /* ── النموذج: غيّره من هنا فقط (ثابت — لا يُضبط من المتصفح أبدًا) ── */
-const APMIX_MODEL = "gpt-4o-mini";
+const APMIX_MODEL = "deepseek-v4.1-flash-free";
 const APMIX_URL = "https://api.apmix.ai/v1/chat/completions";
 
 const APMIX_API_KEY = Deno.env.get("APMIX_API_KEY") || "";
