@@ -9,7 +9,9 @@
            → الرد (أو رسالة خطأ عربية) يعود إلى الصفحة.
 
    ── الخصوصية ───────────────────────────────────────────────────────
-   • لا تُرسل كلمة مرور ولا access token ولا refresh token ولا أي سر.
+   • لا تُرسل كلمة مرور ولا refresh token ولا أي secret — فقط هوية المستخدم
+     عبر رأس Authorization (Bearer access_token) إلى Edge Function ليُتحقق منها
+     بخدمة getUser ولا يُرسل أي userId ثقةً من المتصفح.
    • buildAIContext تبني سياقًا ضيقًا حسب السؤال فقط، عند الإرسال لا عند الكتابة.
    • المحادثة في الذاكرة فقط أثناء فتح الصفحة — لا تُحفظ ولا تدخل في المزامنة.
    ═════════════════════════════════════════════════════════════════════ */
@@ -147,7 +149,12 @@ App.Assistant = (function () {
   }
 
   /* ── الاتصال بالـ Edge Function عبر supabase.functions.invoke ── */
-  function parseInvoke(res){
+  /* قراءة نتيجة invoke من supabase-js 2.x:
+     - الاستجابة الناجحة: { data: { ok:true, reply } } أو { data: { ok:false, code, error } }
+     - مع إصدارات supabase-js الأحدث (مثل 2.116.0) يكون error.context كائن Response خامًا
+       (لا يُحوَّل JSON تلقائيًا) — نقرأ status والجسد منه حتى تظهر رسائلنا العربية.
+     - مع الإصدارات القديمة: error.context = { status, data } (جسم محلل). */
+  async function parseInvoke(res){
     if (!res) return { ok: false, status: 0, code: "", msg: "" };
     if (res.data){
       const d = res.data;
@@ -156,13 +163,35 @@ App.Assistant = (function () {
       }
       return { ok: true, reply: (d && d.reply) || "" };
     }
-    // res.error — نجرب استخراج الحالة والجسم من الأخطاء المتوقعة
+    // res.error — نستخرج الحالة والجسم من صيغ الخطأ المتوقعة
     const e = res.error || {};
     const ctx = (e && e.context) || {};
+    if (ctx instanceof Response){
+      // supabase-js 2.116.0+: error.context هو Response فعلي
+      const status = ctx.status || e.status || 0;
+      let code = "", msg = "";
+      try {
+        let body = null;
+        const ct = String((ctx.headers && ctx.headers.get && ctx.headers.get("content-type")) || "");
+        const r = (typeof ctx.clone === "function") ? ctx.clone() : ctx;
+        try {
+          body = (ct.indexOf("application/json") !== -1) ? await r.json() : await r.text();
+        } catch(_e2){
+          try { body = await r.text(); } catch(_e3){ body = null; }
+        }
+        if (body && typeof body === "object"){
+          code = body.code || "";
+          msg = body.error || body.message || body.msg || "";
+        } else if (typeof body === "string" && body){
+          msg = body;
+        }
+      } catch(_e){ /* نكتفي برسالة المكتبة العامة */ }
+      return { ok: false, status: +status || 0, code: code || "", msg: msg || e.message || "" };
+    }
     let body = ctx.data;
     if (!body || typeof body !== "object") body = {};
     const status = ctx.status || e.status || 0;
-    return { ok: false, status: +status || 0, code: body.code || "", msg: body.error || e.message || "" };
+    return { ok: false, status: +status || 0, code: body.code || "", msg: body.error || body.message || e.message || "" };
   }
 
   function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
@@ -176,7 +205,16 @@ App.Assistant = (function () {
 
   async function callEdge(payload){
     const c = await App.Sync.client();
-    const res = await c.functions.invoke(EDGE_FN, { body: payload });
+    // الهوية الحصرية من جلسة Supabase الحقيقية — لا anon ولا userId مفبرك
+    const s = await c.auth.getSession();
+    const session = s && s.data && s.data.session;
+    if (!session || !session.access_token){
+      return { ok: false, status: 401, code: "auth", msg: "سجل الدخول لاستخدام المساعد الذكي." };
+    }
+    const res = await c.functions.invoke(EDGE_FN, {
+      body: payload,
+      headers: { Authorization: "Bearer " + session.access_token }
+    });
     return parseInvoke(res);
   }
 

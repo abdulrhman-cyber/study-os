@@ -27,8 +27,8 @@
    ═════════════════════════════════════════════════════════════════════ */
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-/* ── النموذج: غيّره من هنا فقط (متوفر في Free Tier) ── */
-const GEMINI_MODEL = "gemini-2.5-flash";
+/* ── النموذج: غيّره من هنا فقط (ثابت — لا يُضبط من المتصفح أبدًا) ── */
+const GEMINI_MODEL = "gemini-3.7-flash";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
