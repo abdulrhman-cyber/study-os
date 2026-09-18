@@ -11,7 +11,7 @@
 const SW_LOG = "[StudyOS SW]";
 const IDB_NAME = "studyos-push";
 const IDB_STORE = "kv";
-const SW_BUILD = "2026-push-5";
+const SW_BUILD = "2026-push-6";
 /* اسم الكاش مرتبط بإصدار الـ SW: أي رفع جديد يغيّر الملف → يتحدّث الـ SW →
    يُحذف الكاش القديم تلقائيًا. زد SW_BUILD عند كل نشرة. */
 const CACHE_STATIC = "studyos-static-" + SW_BUILD;

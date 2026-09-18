@@ -108,6 +108,8 @@ window.App = window.App || {};
         '</div>' +
       '</div>' +
 
+      weaknessDonut(st) +
+
       '<div class="card glass-1" style="margin-top:16px">' +
         '<div class="card-title">' + I.get("analytics", 17) + 'إحصائيات شاملة <span class="ct-sub">Statistics</span></div>' +
         '<div class="stat-grid">' +
@@ -333,8 +335,6 @@ window.App = window.App || {};
         '<button class="btn primary" data-err="add">' + I.get("plus", 15) + 'إضافة خطأ</button>' +
       '</div></div>' +
 
-      weaknessDash(list) +
-
       '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">' +
         '<div class="filter-bar" style="padding:4px">' +
           ["all", ...D.subjects.map(s => s.id)].map(sub => {
@@ -352,37 +352,57 @@ window.App = window.App || {};
             '<button class="btn primary" data-err="add">' + I.get("plus", 15) + 'سجّل أول خطأ</button>') + '</div>');
   }
 
-  function weaknessDash(list){
-    if (!list.length) return "";
-    const wCount = m => (m.reviewLog || []).filter(r => r.correct === false).length;
-    const rec = list.filter(m => wCount(m) >= 2).sort((a, b) => wCount(b) - wCount(a)).slice(0, 4);
-    const nonMastered = list.filter(m => m.status !== "mastered").length;
-    const from = U.addDaysKey(U.todayKey(), -6);
-    let rev = 0, wrong = 0;
-    list.forEach(m => (m.reviewLog || []).forEach(r => { if (r.date >= from){ rev++; if (!r.correct) wrong++; } }));
-    const acc = rev ? Math.round(((rev - wrong) / rev) * 100) : -1;
-    const subjects = D.subjects.filter(s => s.id !== "general" && list.some(m => m.subject === s.id))
-      .map(s => ({ s, n: list.filter(m => m.subject === s.id && m.status !== "mastered").length }))
+  /* Donut: توزيع نقاط الضعف على المواد (يُعرض في صفحة التحليلات) */
+  function weaknessDonut(st){
+    const from7 = U.addDaysKey(U.todayKey(), -6);
+    const mistakes = st.mistakes || [];
+    const weak = mistakes.filter(m => m.status !== "mastered");
+    const bySubj = D.subjects.filter(s => s.id !== "general")
+      .map(s => ({ s, n: weak.filter(m => m.subject === s.id).length }))
+      .filter(x => x.n > 0)
       .sort((a, b) => b.n - a.n);
-    const maxN = Math.max(1, ...subjects.map(x => x.n));
-    const stat = (v, l, c) => '<div class="wd-mini"><b style="color:' + c + '">' + v + '</b><span>' + l + '</span></div>';
-    return '<div class="card glass-1 weak-dash">' +
-      '<div class="wd-head">' + I.get("target", 15) + ' نقاط ضعفك <span class="wd-period">آخر 7 أيام</span></div>' +
-      '<div class="wd-grid">' +
-        stat(rec.length, "أخطاء تكررت (غلطت فيها مرتين+)", "var(--danger-text)") +
-        stat(nonMastered, "أخطاء غير متقنة", "var(--gold-2)") +
-        stat(acc < 0 ? "—" : acc + "%", "دقة مراجعاتك", "var(--em-3)") +
+    const total = bySubj.reduce((a, x) => a + x.n, 0);
+
+    let rev = 0, wrong = 0, repeated = 0;
+    mistakes.forEach(m => {
+      if ((m.reviewLog || []).filter(r => r.correct === false).length >= 2) repeated++;
+      (m.reviewLog || []).forEach(r => { if (r.date >= from7){ rev++; if (!r.correct) wrong++; } });
+    });
+    const acc = rev ? Math.round(((rev - wrong) / rev) * 100) : null;
+
+    const R = 78, C = 2 * Math.PI * R, SW = 16;
+    let acc0 = 0;
+    const arcs = bySubj.map(x => {
+      const frac = x.n / total;
+      const len = Math.max(0.5, C * frac - 4);
+      const seg = '<circle cx="90" cy="90" r="' + R + '" fill="none" stroke="' + x.s.accent + '" stroke-width="' + SW +
+        '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) +
+        '" stroke-dashoffset="' + (-(C * acc0)).toFixed(2) + '" transform="rotate(-90 90 90)"></circle>';
+      acc0 += frac;
+      return seg;
+    }).join("");
+
+    const legend = bySubj.map(x =>
+      '<div class="dl-row"><span class="dl-dot" style="background:' + x.s.accent + '"></span>' +
+      '<span style="flex:1">' + x.s.name + '</span>' +
+      '<b class="num">' + x.n + '</b>' +
+      '<span class="muted small" style="min-width:38px;text-align:end">' + Math.round(x.n / total * 100) + '%</span></div>').join("");
+
+    return '<div class="card glass-1 chart-card" style="margin-top:16px">' +
+      '<div class="chart-head"><h3>' + I.get("target", 15) + ' نقاط ضعفك</h3><span class="ch-note">آخر 7 أيام · Weak Points</span></div>' +
+      (total ?
+        '<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">' +
+          '<div class="donut-wrap" style="width:180px;height:180px;position:relative;flex:none">' +
+            '<svg width="180" height="180" viewBox="0 0 180 180">' + arcs + '</svg>' +
+            '<div class="donut-center"><b class="num">' + total + '</b><span>نقطة ضعف</span></div>' +
+          '</div>' +
+          '<div class="donut-legend" style="flex:1;min-width:200px">' + legend + '</div>' +
+        '</div>'
+        : '<div class="muted small" style="margin-top:10px">لا نقاط ضعف مسجّلة — أداء ممتاز! استمر في المراجعة الدورية.</div>') +
+      '<div class="muted small" style="margin-top:12px;display:flex;gap:18px;flex-wrap:wrap">' +
+        '<span>' + I.get("errors", 13) + ' أخطاء تكررت (غلطت فيها مرتين+): <b style="color:var(--danger-text)">' + repeated + '</b></span>' +
+        (acc != null ? '<span>' + I.get("check", 13) + ' دقة مراجعاتك آخر 7 أيام: <b style="color:var(--em-3)">' + acc + '%</b></span>' : '') +
       '</div>' +
-      (subjects.length ? '<div class="wd-dist">' + subjects.map(x =>
-        '<div class="wd-row"><span class="wd-name">' + I.subj(x.s, 13) + ' ' + x.s.name + '</span>' +
-        '<div class="wd-bar"><i style="width:' + Math.round(x.n / maxN * 100) + '%"></i></div>' +
-        '<b class="wd-num">' + x.n + '</b></div>').join("") + '</div>' : '') +
-      (rec.length ? '<div class="wd-rec">' + rec.map(m =>
-        '<button class="wd-rec-row" data-err="qone" data-id="' + m.id + '" title="مراجعة هذا السؤال">' +
-          '<span class="chip" style="color:' + D.subjectById(m.subject).accent + ';border-color:color-mix(in srgb,' + D.subjectById(m.subject).accent + ' 35%, transparent)">' + D.subjectById(m.subject).name + '</span>' +
-          '<span class="wd-q">' + U.esc(m.question).slice(0, 60) + '</span>' +
-          '<span class="badge red">غلطت ' + wCount(m) + ' مرات</span>' +
-        '</button>').join("") + '</div>' : '') +
     '</div>';
   }
 
@@ -451,6 +471,7 @@ window.App = window.App || {};
     }));
     root.querySelectorAll("[data-err='quiz']").forEach(b => b.addEventListener("click", () => startQuiz()));
     root.querySelectorAll("[data-err='exam']").forEach(b => b.addEventListener("click", () => buildExamSetup()));
+    root.querySelectorAll("[data-err='daily']").forEach(b => b.addEventListener("click", () => App.Views.launchReview(dailyDeckPool())));
   }
 
   /* ── Intelligent review quiz ── */
