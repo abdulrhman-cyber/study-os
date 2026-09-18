@@ -165,28 +165,19 @@ window.App = window.App || {};
     };
   }
 
-  function stateToPayload(){
-    const st = App.Store.getState && App.Store.getState();
-    if (!st) return null;
-    return {
-      v: 1,
-      savedAt: U.iso ? U.iso() : new Date().toISOString(),
-      // نسخة كاملة — أحدث كيان يفوز
-      data: st
-    };
+  /* استخراج حالة التطبيق من صف السحابة (يدعم الصيغة الحديثة {savedAt,data} والقديمة) */
+  function remoteState(row){
+    if (!row) return null;
+    const p = row[DB.payloadCol];
+    if (!p || typeof p !== "object") return null;
+    if (p.data && typeof p.data === "object") return p.data;
+    if (Array.isArray(p.tasks)) return p;
+    return null;
   }
-  function payloadToState(p){
-    if (!p || !p.data || typeof p.data !== "object") return null;
-    return p.data;
-  }
-
-  function newerWins(remote, local){
-    // remote والسحابة عندها updated_at (من الجدول) — والأحدث يفوز
-    const rt = (remote && (remote.updated_at || remote.savedAt)) || "";
-    const lt = (local && (local.savedAt || (local.data && local.data.lastSync) || "")) || "";
-    if (!rt) return "push";
-    if (!lt) return "pull";
-    return rt >= lt ? "pull" : "push";
+  function remoteSavedAt(row){
+    if (!row) return "";
+    const p = row[DB.payloadCol];
+    return (p && p.savedAt) || row[DB.updatedCol] || row.updated_at || "";
   }
 
   function debounce(fn, ms){
@@ -202,17 +193,9 @@ window.App = window.App || {};
   /* ══ sync engine (local-first, cloud mirror) ══ */
   const DB = { table: "study_os_v1", idCol: "user_id", payloadCol: "payload", updatedCol: "updated_at" };
 
-  function selectState(){
-    try { return App.Store.getState(); } catch(e){}
-    try { return App.Store.get().state; } catch(e){}
-    return null;
-  }
-
   async function uploadState(session){
-    const st = selectState();
-    if (!st) return { ok: false, error: "no state" };
-    const payload = stateToPayload();
-    if (!payload) return { ok: false, error: "payload" };
+    const payload = App.Store.localPayload();
+    if (!payload || !payload.data) return { ok: false, error: "payload" };
     const c = await supabaseClient();
     const uid = session && session.user && session.user.id;
     if (!uid) return { ok: false, error: "no uid" };
@@ -237,8 +220,76 @@ window.App = window.App || {};
     return { ok: true, data: data || null, empty: !data };
   }
 
-  /* بعد إعادة التعيين المحلية: نمنع مؤقتًا سحب نسخة السحابة القديمة */
-  let pushOnly = false;
+  const reconciled = {};
+  let syncBusy = false;
+
+  /* ننسى حالة "تمت المزامنة" عند الخروج/تبديل المستخدم حتى يُعاد الدمج بأمان في الدخول التالي */
+  function forgetReconciled(){
+    Object.keys(reconciled).forEach(k => { delete reconciled[k]; });
+  }
+
+  /* أول تسجيل دخول: نقل بيانات الضيف + دمج آمن مع السحابة وكاش الجهاز */
+  async function reconcile(session){
+    const uid = session.user.id;
+    const S = App.Store;
+    const key = S.userKey(uid);
+    const guest = S.readFile(S.guestKey());
+    const cache = S.readFile(key);
+    const res = await downloadState(session);
+    if (!res.ok) return res;
+    const remote = remoteState(res.data);
+    const accountHasData = !!(remote && S.hasContent(remote));
+
+    // 1) الأساس: السحابة إن وُجدت ← وإلا كاش هذا الجهاز ← وإلا حالة جديدة
+    let base;
+    if (accountHasData) base = remote;
+    else if (cache && S.hasContent(cache.data)) base = cache.data;
+    else base = S.defaults();
+
+    // 2) دمج كاش نفس المستخدم (تعديلات أُجريت بلا إنترنت) — بالـ id بلا تكرار
+    if (cache && S.hasContent(cache.data)) base = S.mergeStates(base, cache.data);
+
+    // 3) نقل بيانات الضيف مرة واحدة ثم إفراغ مساحته مع الاحتفاظ بنسخة أمان
+    //    (لا نستبدل تفضيلات حسابٍ فيه بيانات بالفعل بتفضيلات الضيف)
+    let migrated = false;
+    if (guest && S.hasContent(guest.data)){
+      base = S.mergeStates(base, guest.data, { skipDerived: true, skipPrefs: accountHasData });
+      migrated = true;
+    }
+
+    S.activateWorkspace(key, base);
+    S.setLastUser(uid);
+    if (migrated){ S.backupGuest(); S.clearGuest(); }
+
+    const up = await uploadState(session);
+    if (!up.ok) return up;
+
+    reconciled[uid] = true;
+    if (migrated){
+      try { if (App.UI && App.UI.toast) App.UI.toast("تم نقل بياناتك إلى حسابك بنجاح.", "success", "cloud"); } catch(e){}
+      safeEmit("sync-migrated", { uid });
+    }
+    safeEmit("sync-status", { state: "synced", direction: "reconcile", at: U.iso ? U.iso() : new Date().toISOString() });
+    return { ok: true, direction: "reconcile", migrated };
+  }
+
+  /* مزامنة عادية بعد الربط: الأحدث (savedAt) يفوز ثم نرفع */
+  async function lwwSync(session){
+    const uid = session.user.id;
+    if (App.Store.currentKey() !== App.Store.userKey(uid)) return reconcile(session);
+    const local = App.Store.localPayload();
+    const res = await downloadState(session);
+    if (!res.ok) return res;
+    const remote = remoteState(res.data);
+    const rSaved = remoteSavedAt(res.data);
+    if (remote && rSaved && rSaved > (local.savedAt || "")){
+      App.Store.activateWorkspace(App.Store.userKey(uid), remote);
+    }
+    const up = await uploadState(session);
+    if (!up.ok) return up;
+    safeEmit("sync-status", { state: "synced", direction: "lww", at: U.iso ? U.iso() : new Date().toISOString() });
+    return { ok: true, direction: "lww" };
+  }
 
   async function syncNow(session){
     try {
@@ -248,46 +299,28 @@ window.App = window.App || {};
         session = s.session;
       }
       if (!session) return { ok: false, error: "أنت غير مسجّل الدخول — اربط حساب Google أولًا." };
-      let direction = "push";
-      if (!pushOnly){
-        // 1) نحمّل نسخة السحابة (فقط لما نبقى محتاجين المقارنة)
-        const res = await downloadState(session);
-        if (!res.ok) return res;
-        if (res.data){
-          const remotePayload = res.data[DB.payloadCol] || null;
-          const localPayload = stateToPayload();
-          direction = newerWins(remotePayload && remotePayload.data ? remotePayload.data : remotePayload, localPayload);
-          if (direction === "pull" && remotePayload){
-            const remoteState = payloadToState(remotePayload);
-            if (remoteState && App.Store.importData){
-              try { App.Store.importData(JSON.stringify({ data: remoteState })); }
-              catch(e){ console.warn("import remote failed", e); }
-            }
-          }
-        }
-      }
-      // 2) نرفع نسختنا (أو نرفع بعد السحب حتى يكون كل شيء متزامنًا)
-      const up = await uploadState(session);
-      if (!up.ok) return up;
-      safeEmit("sync-status", { state: "synced", direction, at: U.iso ? U.iso() : new Date().toISOString() });
-      return { ok: true, direction };
+      const uid = session.user.id;
+      if (syncBusy) return { ok: true, direction: "busy" };
+      syncBusy = true;
+      try {
+        if (!reconciled[uid]) return await reconcile(session);
+        return await lwwSync(session);
+      } finally { syncBusy = false; }
     } catch(e){
       safeEmit("sync-status", { state: "error", error: (e && e.message) || String(e) });
       return { ok: false, error: (e && e.message) || String(e) };
     }
   }
 
-  /* إعادة تعيين كاملة: مسح السحابة + رفع الحالة الجديدة (بدون سحب القديمة) */
+  /* إعادة تعيين كاملة: مسح السحابة + رفع الحالة الجديدة */
   async function resetCloud(){
     try {
       const c = await supabaseClient();
       const s = await getSession();
       const uid = s.session && s.session.user && s.session.user.id;
       if (!uid) return { ok: true };
-      pushOnly = true;
       const { error } = await c.from(DB.table).delete().eq(DB.idCol, uid);
       await uploadState(s.session);
-      setTimeout(() => { pushOnly = false; }, 3000);
       return { ok: !error, error: error && error.message };
     } catch(e){
       return { ok: false, error: (e && e.message) || String(e) };
@@ -329,6 +362,11 @@ window.App = window.App || {};
       const { error } = await c.auth.signOut();
       if (!error){
         App.Sync.user = null;
+        forgetReconciled();
+        if (App.Store && App.Store.setLastUser && App.Store.activateWorkspace){
+          App.Store.setLastUser(null);
+          App.Store.activateWorkspace(App.Store.guestKey());
+        }
         safeEmit("sync-user", null);
         safeEmit("sync-status", { state: "signed_out", at: U.iso ? U.iso() : new Date().toISOString() });
       }
@@ -354,6 +392,11 @@ window.App = window.App || {};
         if (event === "SIGNED_IN" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED"){
           if (meta) syncNow(session);
         } else if (event === "SIGNED_OUT"){
+          forgetReconciled();
+          if (App.Store && App.Store.setLastUser && App.Store.activateWorkspace){
+            App.Store.setLastUser(null);
+            App.Store.activateWorkspace(App.Store.guestKey());
+          }
           safeEmit("sync-status", { state: "signed_out", at: U.iso ? U.iso() : new Date().toISOString() });
         }
       });

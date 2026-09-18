@@ -4,7 +4,16 @@ window.App = window.App || {};
 App.Store = (function () {
   const U = App.Util;
   const D = App.Data;
-  const KEY = "studyos.v1";
+  const KEY = "studyos.v1";                 // مساحة بيانات الضيف (قبل تسجيل الدخول)
+  const USER_PREFIX = "studyos.v1.u.";      // مساحة بيانات كل مستخدم مسجّل (مفتاح مرتبط بـ user id)
+  const LAST_USER_KEY = "studyos.lastUser"; // آخر مستخدم فعّال — لعرض الكاش فورًا عند الإقلاع
+
+  let activeKey = KEY;
+  let lastSavedAt = "";
+
+  function userKey(uid){ return USER_PREFIX + String(uid); }
+  function guestKey(){ return KEY; }
+  function currentKey(){ return activeKey; }
 
   function defaults(){
     return {
@@ -37,65 +46,93 @@ App.Store = (function () {
 
   function save(){
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      try { localStorage.setItem(KEY, JSON.stringify(state)); }
-      catch(e){ console.warn("save failed", e); }
-    }, 120);
+    saveTimer = setTimeout(flush, 120);
   }
 
-  function load(){
+  /* كتابة فورية لمساحة العمل الحالية (نستدعيها قبل تبديل المستخدم/مساحة العمل) */
+  function flush(){
+    if (saveTimer){ clearTimeout(saveTimer); saveTimer = null; }
     try {
-      const raw = localStorage.getItem(KEY);
-      if (raw){
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object" && Array.isArray(parsed.tasks)){
-          state = Object.assign(defaults(), parsed);
-          normalize();
-          return state;
-        }
-      }
-    } catch(e){ console.warn("load failed, fresh start", e); }
-    state = defaults();
+      lastSavedAt = U.iso();
+      localStorage.setItem(activeKey, JSON.stringify({ v: 1, savedAt: lastSavedAt, data: state }));
+    } catch(e){ console.warn("save failed", e); }
+  }
+
+  /* قراءة ملف محلي — يدعم الصيغة الحديثة { savedAt, data } والصيغة القديمة (الحالة مباشرة) */
+  function readFile(key){
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      const data = (parsed.data && Array.isArray(parsed.data.tasks)) ? parsed.data
+                 : (Array.isArray(parsed.tasks) ? parsed : null);
+      if (!data) return null;
+      return { savedAt: parsed.savedAt || "", data: normalizeState(Object.assign(defaults(), data)) };
+    } catch(e){ return null; }
+  }
+
+  function bootKey(){
+    try {
+      const last = localStorage.getItem(LAST_USER_KEY);
+      if (last) return userKey(last);
+    } catch(e){}
+    return KEY;
+  }
+
+  function load(key){
+    activeKey = key || bootKey();
+    const file = readFile(activeKey);
+    if (file){ state = file.data; lastSavedAt = file.savedAt || ""; }
+    else { state = defaults(); lastSavedAt = ""; }
+    normalize(state);
     return state;
   }
 
-  function normalize(){
-    state.settings = Object.assign(defaults().settings, state.settings);
-    state.user = Object.assign(defaults().user, state.user);
-    state.settings.notif = Object.assign(defaults().settings.notif, state.settings.notif);
-    if (!state.daily) state.daily = {};
-    if (!state.activityLog) state.activityLog = [];
-    if (!state.unlocked) state.unlocked = {};
-    if (!state.exams) state.exams = [];
+  function normalize(st){
+    st = st || state;
+    const def = defaults();
+    st.settings = Object.assign({}, def.settings, st.settings || {});
+    st.settings.notif = Object.assign({}, def.settings.notif, (st.settings && st.settings.notif) || {});
+    st.user = Object.assign({}, def.user, st.user || {});
+    if (!st.daily) st.daily = {};
+    if (!st.activityLog) st.activityLog = [];
+    if (!st.unlocked) st.unlocked = {};
+    ["tasks","homework","blocks","mistakes","notes","exams","notifications","levelUps"].forEach(k => {
+      if (!Array.isArray(st[k])) st[k] = [];
+    });
     // legacy mistakes: backfill spaced-review scheduling fields
-    state.mistakes.forEach(m => {
+    st.mistakes.forEach(m => {
       if (m.reviewStage == null) m.reviewStage = (m.status === "mastered" ? 2 : 0);
       if (m.nextReview == null) m.nextReview = (m.status === "mastered" ? null : U.todayKey());
     });
-    rebuildDaily();
+    rebuildDaily(st);
+    return st;
   }
+  function normalizeState(st){ return normalize(st); }
 
   /* ── daily rollup (derived, single source of truth) ── */
-  function rebuildDaily(){
+  function rebuildDaily(st){
+    st = st || state;
     const daily = {};
     function bump(k, field, n){
       if (!k) return;
       daily[k] = daily[k] || {};
       daily[k][field] = (daily[k][field] || 0) + (n || 1);
     }
-    state.tasks.forEach(t => { if (t.completed && t.completedOn) bump(t.completedOn, "tasksCompleted"); });
-    state.homework.forEach(h => { if (h.completed && h.completedOn) bump(h.completedOn, "homeworkCompleted"); });
-    state.blocks.forEach(b => {
+    st.tasks.forEach(t => { if (t.completed && t.completedOn) bump(t.completedOn, "tasksCompleted"); });
+    st.homework.forEach(h => { if (h.completed && h.completedOn) bump(h.completedOn, "homeworkCompleted"); });
+    st.blocks.forEach(b => {
       bump(b.date, "studyMin", b.minutes);
       if (b.mode === "focus") bump(b.date, "focus");
       if (b.mode === "pomodoro") bump(b.date, "pomodoros");
       if (b.mode !== "quick") bump(b.date, "sessions");
     });
-    state.mistakes.forEach(m => {
+    st.mistakes.forEach(m => {
       (m.reviewLog || []).forEach(r => bump(r.date, "reviews"));
     });
-    (state.exams || []).forEach(x => bump(x.date, "exams"));
-    state.daily = daily;
+    (st.exams || []).forEach(x => bump(x.date, "exams"));
+    st.daily = daily;
   }
 
   /* ── activity log ── */
@@ -708,8 +745,119 @@ App.Store = (function () {
 
   function getState(){ return state; }
 
+  /* ═══════════ مساحات العمل (ضيف / مستخدم) + الدمج الآمن ═══════════ */
+
+  /* هل تحتوي الحالة على بيانات يملكها المستخدم فعلاً؟
+     (نتجاهل التذكيرات وسجل النشاط لأنها مشتقة/مؤقتة وقد تُضاف تلقائيًا عند الإقلاع) */
+  function hasContent(st){
+    if (!st) return false;
+    if (st.seeded) return true;
+    if ((st.xp | 0) > 0) return true;
+    if (["tasks","homework","blocks","mistakes","notes","exams"].some(k => (st[k] || []).length)) return true;
+    if (st.unlocked && Object.keys(st.unlocked).length) return true;
+    try {
+      const def = defaults();
+      if (JSON.stringify(st.settings) !== JSON.stringify(def.settings)) return true;
+      if (st.user && (st.user.name !== def.user.name || st.user.avatar !== def.user.avatar || st.user.grade !== def.user.grade)) return true;
+    } catch(e){}
+    return false;
+  }
+
+  function itemTime(x){
+    return (x && (x.updatedAt || x.updated_at || x.ts || x.createdAt || x.completedAt || "")) || "";
+  }
+
+  /* دمج مصفوفتين بواسطة id — يمنع التكرار، ويأخذ الأحدث عند التعارض */
+  function mergeById(a, b){
+    const map = new Map();
+    (a || []).forEach(x => { if (x) map.set(x.id != null ? x.id : U.uid(), x); });
+    (b || []).forEach(x => {
+      if (!x) return;
+      const id = x.id != null ? x.id : U.uid();
+      const ex = map.get(id);
+      if (!ex){ map.set(id, x); return; }
+      map.set(id, itemTime(x) >= itemTime(ex) ? x : ex);
+    });
+    return Array.from(map.values());
+  }
+
+  function mergeActivity(a, b){
+    const map = new Map();
+    (a || []).concat(b || []).forEach(x => { if (x) map.set((x.ts || "") + "|" + (x.txt || ""), x); });
+    return Array.from(map.values()).sort((x, y) => (y.ts || "").localeCompare(x.ts || "")).slice(0, 150);
+  }
+
+  /* merge آمن: كل الكيانات تُوحَّد بالـ id، والقيم العددية تأخذ الأقصى */
+  function mergeStates(base, extra, opts){
+    opts = opts || {};
+    const out = Object.assign(defaults(), base || {});
+    const e = extra || {};
+    out.tasks = mergeById(out.tasks, e.tasks);
+    out.homework = mergeById(out.homework, e.homework);
+    out.blocks = mergeById(out.blocks, e.blocks);
+    out.mistakes = mergeById(out.mistakes, e.mistakes);
+    out.notes = mergeById(out.notes, e.notes);
+    out.exams = mergeById(out.exams, e.exams);
+    out.levelUps = mergeById(out.levelUps, e.levelUps);
+    out.xp = Math.max(out.xp | 0, e.xp | 0);
+    out.pomodoroCount = Math.max(out.pomodoroCount | 0, e.pomodoroCount | 0);
+    out.seeded = !!(out.seeded || e.seeded);
+    out.unlocked = Object.assign({}, out.unlocked, e.unlocked || {});
+    /* skipPrefs: لا نُبقي تفضيلات الطرف الآخر عند الدمج — تُستخدم عند نقل بيانات الضيف
+       إلى حساب فيه محتوى بالفعل، حتى لا تُستبدل إعدادات الحساب بإعدادات الضيف الافتراضية */
+    if (!opts.skipPrefs){
+      out.settings = Object.assign({}, out.settings, e.settings || {});
+      out.settings.notif = Object.assign({}, (base && base.settings && base.settings.notif) || {}, (e.settings && e.settings.notif) || {});
+      out.user = Object.assign({}, out.user, e.user || {});
+    }
+    if (!opts.skipDerived){
+      out.notifications = mergeById(out.notifications, e.notifications)
+        .sort((x, y) => (y.ts || "").localeCompare(x.ts || "")).slice(0, 120);
+      out.activityLog = mergeActivity(out.activityLog, e.activityLog);
+    }
+    rebuildDaily(out);
+    return out;
+  }
+
+  /* payload محلي بصيغة مطابقة للسحابة */
+  function localPayload(){ return { v: 1, savedAt: lastSavedAt || U.iso(), data: state }; }
+
+  /* تبديل مساحة العمل: يفلش الحالية، ثم يحمّل الحالة المطلوبة (أو من المفتاح) ويحفظها */
+  function activateWorkspace(key, nextState){
+    flush();
+    activeKey = key || KEY;
+    if (nextState){
+      state = normalizeState(Object.assign(defaults(), nextState));
+    } else {
+      const f = readFile(activeKey);
+      state = f ? f.data : defaults();
+      lastSavedAt = f ? (f.savedAt || "") : "";
+    }
+    normalize(state);
+    flush();
+    U.emit("change", { reason: "workspace" });
+    return state;
+  }
+
+  function setLastUser(uid){
+    try { if (uid) localStorage.setItem(LAST_USER_KEY, String(uid)); else localStorage.removeItem(LAST_USER_KEY); }
+    catch(e){}
+  }
+
+  /* نسخة أمان من بيانات الضيف + إفراغ مساحة الضيف بعد نجاح النقل */
+  function backupGuest(){
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) localStorage.setItem(KEY + ".bak." + U.todayKey(), raw);
+    } catch(e){}
+  }
+  function clearGuest(){ try { localStorage.removeItem(KEY); } catch(e){} }
+
   return {
-    load, getState, save, defaults,
+    load, getState, save, flush, defaults,
+    userKey, guestKey, currentKey, readFile,
+    activateWorkspace, setLastUser, localPayload, hasContent, mergeStates,
+    backupGuest, clearGuest,
     addTask, updateTask, deleteTask, toggleTask, rescheduleTask, findTask,
     addHomework, updateHw, deleteHw, toggleHw, findHw, refreshHwStatus, hwCountdown,
     addBlock, deleteBlock,
