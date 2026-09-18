@@ -221,7 +221,6 @@ window.App = window.App || {};
   }
 
   const reconciled = {};
-  let syncBusy = false;
 
   /* ننسى حالة "تمت المزامنة" عند الخروج/تبديل المستخدم حتى يُعاد الدمج بأمان في الدخول التالي */
   function forgetReconciled(){
@@ -292,24 +291,46 @@ window.App = window.App || {};
   }
 
   async function syncNow(session){
-    try {
-      if (!session){
-        const s = await getSession();
-        if (!s.ok) return s;
-        session = s.session;
-      }
-      if (!session) return { ok: false, error: "أنت غير مسجّل الدخول — اربط حساب Google أولًا." };
-      const uid = session.user.id;
-      if (syncBusy) return { ok: true, direction: "busy" };
-      syncBusy = true;
+    if (runningSync) return runningSync;
+    runningSync = (async () => {
       try {
-        if (!reconciled[uid]) return await reconcile(session);
-        return await lwwSync(session);
-      } finally { syncBusy = false; }
-    } catch(e){
-      safeEmit("sync-status", { state: "error", error: (e && e.message) || String(e) });
-      return { ok: false, error: (e && e.message) || String(e) };
-    }
+        if (!session){
+          const s = await getSession();
+          if (!s.ok) return s;
+          session = s.session;
+        }
+        if (!session) return { ok: false, error: "أنت غير مسجّل الدخول — التغييرات محفوظة محليًا وستُرفع تلقائيًا عند تسجيل الدخول." };
+        const uid = session.user.id;
+        const attempt = reconciled[uid] ? lwwSync(session) : reconcile(session);
+        return await withSyncTimeout(attempt);
+      } catch(e){
+        safeEmit("sync-status", { state: "error", error: (e && e.message) || String(e) });
+        return { ok: false, error: (e && e.message) || String(e) };
+      }
+    })();
+    const p = runningSync;
+    p.then(() => { if (runningSync === p) runningSync = null; }, () => { if (runningSync === p) runningSync = null; });
+    return p;
+  }
+  let runningSync = null;
+
+  /* مهلة قصوى لكل محاولة مزامنة حتى لا يبقى runningSync عالقًا أبدًا (شبكة نصف منقطعة
+     أو طلب معلّق). بعد المهلة يُعاد {ok:false} ويستطيع المستدعي إعادة المحاولة بأمان. */
+  const SYNC_TIMEOUT_MS = 15000;
+  function withSyncTimeout(promise){
+    return new Promise(resolve => {
+      let done = false;
+      const timer = setTimeout(() => {
+        if (!done){
+          done = true;
+          resolve({ ok: false, timeout: true, error: "انتهت مهلة المزامنة مع السحابة — سنعيد المحاولة تلقائيًا." });
+        }
+      }, SYNC_TIMEOUT_MS);
+      Promise.resolve(promise).then(
+        r => { if (!done){ done = true; clearTimeout(timer); resolve(r); } },
+        e => { if (!done){ done = true; clearTimeout(timer); resolve({ ok: false, error: (e && e.message) || String(e) }); } }
+      );
+    });
   }
 
   /* إعادة تعيين كاملة: مسح السحابة + رفع الحالة الجديدة */
@@ -403,6 +424,59 @@ window.App = window.App || {};
     }).catch(() => {});
   }
 
+  /* ══ online/offline: مزامنة تلقائية عند عودة الإنترنت + مؤشر اتصال ══ */
+  let wired = false;
+  function wireConn(){
+    if (wired) return;
+    wired = true;
+    function toast(msg, kind, icon){
+      try { if (App.UI && App.UI.toast) App.UI.toast(msg, kind, icon); } catch(e){}
+    }
+    function report(){
+      safeEmit("conn-status", { online: !!navigator.onLine, at: U.iso ? U.iso() : new Date().toISOString() });
+    }
+    /* مزامنة فعلية لحظة عودة الإنترنت: ننتظر جاهزية الجلسة بمحاولات آمنة (لو الجلسة/
+       المكتبة غير جاهزة بعد) ثم نستدعي syncNow فعلًا. نجاح رسالة "تمت المزامنة"
+       مشروط بنجاح طلب Supabase الحقيقي، والفشل يعرض الخطأ الفعلي. */
+    const ONLINE_RETRY_MS = 2500;
+    const ONLINE_RETRY_MAX = 6;
+    let connRetry = 0;
+    async function onConnOnline(){
+      report();
+      let s;
+      try { s = await getSession(); } catch(e){ s = { ok: false }; }
+      if (!s.ok || !s.session){
+        if (connRetry < ONLINE_RETRY_MAX){
+          connRetry++;
+          setTimeout(onConnOnline, ONLINE_RETRY_MS);
+          return;
+        }
+        connRetry = 0;
+        if (!s.session){
+          toast("أنت غير مسجّل الدخول — التغييرات محفوظة محليًا وستُرفع عند تسجيل الدخول.", "gold", "info");
+        }
+        return;
+      }
+      connRetry = 0;
+      const res = await syncNow(s.session);
+      if (res && res.ok){
+        toast("تمت المزامنة مع السحابة.", "success", "check");
+      } else if (res && res.timeout){
+        toast((res && res.error) || "تعذرت المزامنة — سنعيد المحاولة تلقائيًا.", "error", "close");
+        setTimeout(() => syncNow(s.session).then(() => {}, () => {}), ONLINE_RETRY_MS);
+      } else {
+        toast((res && res.error) || "تعذرت المزامنة — سنعيد المحاولة تلقائيًا.", "error", "close");
+      }
+    }
+    if (typeof window.addEventListener !== "function"){ report(); return; }
+    window.addEventListener("offline", () => {
+      report();
+      toast("غير متصل — التغييرات تُحفظ محليًا وستُزامن تلقائيًا عند عودة الإنترنت.", "gold", "info");
+    });
+    window.addEventListener("online", () => { onConnOnline(); });
+    report();
+  }
+
   async function getSession(){
     try {
       const c = await supabaseClient();
@@ -421,8 +495,11 @@ window.App = window.App || {};
     generateClient: supabaseClient,
     config: cfg,
     signIn, signOut, getSession, syncNow, resetCloud,
+    online: () => (typeof navigator !== "undefined") ? !!navigator.onLine : false,
+    wireConn,
     async init(){
       try {
+        wireConn();
         const s = await getSession();
         if (s.ok && s.session){
           this.ready = true;
@@ -477,6 +554,8 @@ window.App = window.App || {};
   function schedule(){
     clearTimeout(scheduleTimer);
     scheduleTimer = setTimeout(() => {
+      // أثناء الانقطاع الفعلي لا نطلق طلبات لمصادفة فشل — حدث "online" سيشغّل المزامنة
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       getSession().then(s => {
         if (s.ok && s.session){
           syncNow(s.session);
