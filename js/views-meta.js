@@ -352,6 +352,22 @@ const syncBody =
       srow("حالة الاتصال", '<span id="conn-state" class="muted small">تحضير…</span>',
         '<span class="badge neutral" id="conn-badge">جارٍ الفحص</span>');
 
+    const aiBody =
+      '<div class="set-row"><div class="sr-txt"><b>مفتاح Gemini API</b><span>المفتاح يُخزّن مشفّرًا في السحابة ولا يظهر لأحد — حتى المطور لا يستطيع قراءته.</span></div></div>' +
+      '<div class="set-row"><div class="sr-txt"><b>الحالة</b><span id="ai-settings-status">جارٍ الفحص…</span></div>' +
+        '<div class="sr-ctl"><span class="badge neutral" id="ai-settings-badge">—</span></div></div>' +
+      '<div class="set-row"><div class="sr-txt"><b>المفتاح</b><span>أدخل مفتاح Gemini API الخاص بك (يبدأ بـ AIza)</span></div>' +
+        '<div class="sr-ctl" style="display:flex;gap:8px;align-items:center">' +
+          '<input type="password" class="input" id="ai-settings-key" placeholder="AIzaSy..." style="min-width:200px" autocomplete="off">' +
+          '<button class="btn sm" id="ai-settings-toggle-vis" aria-label="إظهار/إخفاء المفتاح">' + I.get("info", 13) + '</button>' +
+        '</div></div>' +
+      '<div class="set-row"><div class="sr-txt"><b>النموذج</b><span>gemini-2.5-flash-lite</span></div></div>' +
+      '<div class="set-foot" style="flex-wrap:wrap;gap:8px">' +
+        '<button class="btn sm primary" id="ai-settings-save">حفظ المفتاح</button>' +
+        '<button class="btn sm ghost" id="ai-settings-test">اختبار الاتصال</button>' +
+        '<button class="btn sm danger" id="ai-settings-delete">حذف المفتاح</button>' +
+      '</div>';
+
     const dangerBody =
       srow("إعادة ضبط التطبيق", "حذف كل المهام والجلسات والملاحظات والإحصائيات",
         '<button class="btn danger sm" data-set="reset">إعادة تعيين</button>') +
@@ -367,6 +383,7 @@ const syncBody =
         card("", "", "bell", "التنبيهات", "تحكم في طريقة تنبيهك", notifBody) +
         card("", "", "box", "البيانات", "إدارة بياناتك ونسخك الاحتياطية", dataBody) +
         card("", "", "cloud", "السحابة", "اربط حساب Google للمزامنة عبر الأجهزة", syncBody) +
+        card("", "", "robot", "المساعد الذكي", "إعداد مفتاح Gemini API للمساعد الذكي", aiBody) +
         card("", "danger", "trash", "منطقة الخطر", "إجراءات لا يمكن التراجع عنها", dangerBody) +
       '</div>';
   }
@@ -553,6 +570,110 @@ const syncBody =
         S.seedDemo(); UI.toast("تم تحميل البيانات التجريبية.", "gold", "box");
       });
     });
+    /* ── AI Settings bindings ── */
+    (function bindAISettings(){
+      const statusEl = root.querySelector("#ai-settings-status");
+      const badgeEl = root.querySelector("#ai-settings-badge");
+      const keyInput = root.querySelector("#ai-settings-key");
+      const saveBtn = root.querySelector("#ai-settings-save");
+      const testBtn = root.querySelector("#ai-settings-test");
+      const deleteBtn = root.querySelector("#ai-settings-delete");
+      const toggleBtn = root.querySelector("#ai-settings-toggle-vis");
+
+      if (toggleBtn) toggleBtn.addEventListener("click", () => {
+        if (!keyInput) return;
+        const isPass = keyInput.type === "password";
+        keyInput.type = isPass ? "text" : "password";
+      });
+
+      async function getAiToken(){
+        if (!App.Sync || !App.Sync.getSession) return null;
+        try {
+          const s = await App.Sync.getSession();
+          if (s.ok && s.session && s.session.access_token) return s.session.access_token;
+        } catch(_e){}
+        return null;
+      }
+      async function aiFetch(method, body){
+        const token = await getAiToken();
+        const c = App.SupabaseConfig;
+        if (!token || !c || !c.supabaseUrl) return { ok: false, error: "غير مسجّل الدخول." };
+        const opts = { method, headers: { "Authorization": "Bearer " + token, "apikey": c.supabaseAnonKey } };
+        if (body){ opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+        const res = await fetch(c.supabaseUrl + "/functions/v1/ai-settings", opts);
+        return await res.json();
+      }
+
+      async function loadStatus(){
+        try {
+          const data = await aiFetch("GET");
+          if (data && data.ok && data.configured){
+            if (statusEl) statusEl.textContent = "تم الإعداد — النموذج: " + (data.model || "gemini-2.5-flash-lite");
+            if (badgeEl){ badgeEl.textContent = "مُعد"; badgeEl.className = "badge emerald"; }
+          } else {
+            if (statusEl) statusEl.textContent = "لم يُضف مفتاح بعد.";
+            if (badgeEl){ badgeEl.textContent = "غير مُعد"; badgeEl.className = "badge amber"; }
+          }
+        } catch(_e){
+          if (statusEl) statusEl.textContent = "تعذّر الفحص.";
+          if (badgeEl){ badgeEl.textContent = "خطأ"; badgeEl.className = "badge red"; }
+        }
+      }
+      loadStatus();
+
+      if (saveBtn) saveBtn.addEventListener("click", async () => {
+        const key = (keyInput ? keyInput.value : "").trim();
+        if (!key){ UI.toast("أدخل المفتاح أولًا.", "error", "info"); return; }
+        saveBtn.disabled = true;
+        try {
+          const data = await aiFetch("POST", { apiKey: key });
+          if (data && data.ok){
+            UI.toast("تم حفظ المفتاح بنجاح.", "success", "check");
+            if (keyInput) keyInput.value = "";
+            loadStatus();
+          } else {
+            UI.toast((data && data.error) || "تعذّر الحفظ.", "error", "close");
+          }
+        } catch(_e){
+          UI.toast("خطأ في الاتصال.", "error", "close");
+        }
+        saveBtn.disabled = false;
+      });
+
+      if (testBtn) testBtn.addEventListener("click", async () => {
+        testBtn.disabled = true;
+        testBtn.textContent = "جارٍ الفحص…";
+        try {
+          const data = await aiFetch("POST", { action: "test" });
+          if (data && data.ok){
+            UI.toast("الاتصال بنجاح — المفتاح صالح.", "success", "check");
+          } else {
+            UI.toast((data && data.error) || "تعذّر الاتصال.", "error", "close");
+          }
+        } catch(_e){
+          UI.toast("خطأ في الاتصال.", "error", "close");
+        }
+        testBtn.disabled = false;
+        testBtn.textContent = "اختبار الاتصال";
+      });
+
+      if (deleteBtn) deleteBtn.addEventListener("click", () => {
+        UI.dangerConfirm("حذف المفتاح", "سيتم حذف مفتاح Gemini API نهائًا. لن تتمكن من استخدام المساعد الذكي حتى تُضيف مفتاحًا جديدًا.", "حذف", async () => {
+          try {
+            const data = await aiFetch("DELETE");
+            if (data && data.ok){
+              UI.toast("تم حذف المفتاح.", "gold", "trash");
+              loadStatus();
+            } else {
+              UI.toast((data && data.error) || "تعذّر الحذف.", "error", "close");
+            }
+          } catch(_e){
+            UI.toast("خطأ في الاتصال.", "error", "close");
+          }
+        });
+      });
+    })();
+
     root.querySelector("[data-set='reset']").addEventListener("click", () => {
       UI.dangerConfirm("إعادة تعيين الكل",
         'هل أنت متأكد؟ سيتم حذف جميع المهام والجلسات والملاحظات والإحصائيات والإنجازات نهائيًا (محليًا وعلى السحابة إن كنت متصلًا). هذه الخطوة لا يمكن التراجع عنها.',

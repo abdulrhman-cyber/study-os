@@ -1,19 +1,13 @@
 /* ═══════════════ STUDY OS — ai-assistant.js (المساعد الذكي) ═══════════════
-   طبقة العميل للمساعد الذكي: صفحة كاملة (#/ai-assistant) تتخاطب مع Gemini
-   حصريًا عبر Edge Function `ai-assistant` في Supabase. لا يوجد أي اتصال
-   مباشر بـ Gemini، ولا يُحفظ أي مفتاح/رمز في هذا الملف أو في التخزين.
+   واجهة المساعد الذكي. يتصل بـ Edge Function (ai-assistant) بمفتاح
+   Gemini الخاص بالمستخدم (مُخزّن مشفّرًا في ai_settings).
 
    ── المعمارية ──────────────────────────────────────────────────────
-   المتصفح → App.Sync.client().functions.invoke("ai-assistant", {...})
-           → Supabase Edge Function تتحقق من JWT وتتصل بـ Gemini
-           → الرد (أو رسالة خطأ عربية) يعود إلى الصفحة.
+   المحادثة في الذاكرة فقط ولا تُحفظ أو تُزامن.
 
    ── الخصوصية ───────────────────────────────────────────────────────
-   • لا تُرسل كلمة مرور ولا refresh token ولا أي secret — فقط هوية المستخدم
-     عبر رأس Authorization (Bearer access_token) إلى Edge Function ليُتحقق منها
-     بخدمة getUser ولا يُرسل أي userId ثقةً من المتصفح.
-   • buildAIContext تبني سياقًا ضيقًا حسب السؤال فقط، عند الإرسال لا عند الكتابة.
-   • المحادثة في الذاكرة فقط أثناء فتح الصفحة — لا تُحفظ ولا تدخل في المزامنة.
+   لا يُخزّن أي مفتاح API في localStorage أو study_os_v1.
+   المفتاح يبقى مشفّرًا في Supabase (ai_settings) فقط.
    ═════════════════════════════════════════════════════════════════════ */
 "use strict";
 window.App = window.App || {};
@@ -22,17 +16,15 @@ App.Assistant = (function () {
   const $ = id => document.getElementById(id);
 
   /* ── حالة في الذاكرة فقط ── */
-  let msgs = [];            // [{ id, role: "user"|"ai", text, mode, error?, typing?, retry?, code?, tag?, t }]
-  let mode = "chat";        // الوضع النشط (يبقى لأحاديث المتابعة)
+  let msgs = [];
+  let mode = "chat";
   let sending = false;
-  let pendingMistakeId = null;  // خطأ منتقى من بنك الأخطاء
-  let pendingAuto = null;       // إرسال تلقائي عند فتح الصفحة من رابط خارجي
-  let signedIn = false;         // آخر حالة مصادقة معروفة (تُستخدم للإشعارات فقط)
-  let stickBottom = true;       // تمرير تلقائي حتى الأسفل ما لم يصعد المستخدم
+  let pendingMistakeId = null;
+  let pendingAuto = null;
+  let stickBottom = true;
+  let configured = null; // null = unknown, true = has key, false = no key
 
   const MAX_CHARS = 4000;
-  const EDGE_FN = "ai-assistant";
-  const CLIENT_TIMEOUT_MS = 65000;
 
   const MODES = ["chat", "explain_question", "quiz", "study_plan", "progress_analysis", "error_bank_help"];
   const MODE_LABEL = {
@@ -58,10 +50,9 @@ App.Assistant = (function () {
   const SEND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
   const COPY_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   const CHECK_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
-  const WIFI_OFF_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 13.4A13.9 13.9 0 0 0 6 9.6"/><path d="M16.2 16.4a8 8 0 0 0-8.4-1.1"/><path d="M12 20h.01"/><path d="M2 2l20 20"/></svg>';
   const AI_LOGO_SRC = "img/ai-logo.png";
 
-  /* ── سياق Study OS: يُبنى فقط عند الضغط على إرسال، حسب الوضع ── */
+  /* ── سياق Study OS ── */
   function mistakeNugget(m){
     const n = {
       subject: D.subjName(m.subject),
@@ -160,103 +151,64 @@ App.Assistant = (function () {
     return c;
   }
 
-  /* ── الاتصال بالـ Edge Function عبر supabase.functions.invoke ── */
-  /* قراءة نتيجة invoke من supabase-js 2.x:
-     - الاستجابة الناجحة: { data: { ok:true, reply } } أو { data: { ok:false, code, error } }
-     - مع إصدارات supabase-js الأحدث (مثل 2.116.0) يكون error.context كائن Response خامًا
-       (لا يُحوَّل JSON تلقائيًا) — نقرأ status والجسد منه حتى تظهر رسائلنا العربية.
-     - مع الإصدارات القديمة: error.context = { status, data } (جسم محلل). */
-  async function parseInvoke(res){
-    if (!res) return { ok: false, status: 0, code: "", msg: "" };
-    if (res.data){
-      const d = res.data;
-      if (d && typeof d === "object" && d.ok === false){
-        return { ok: false, status: d.status || 0, code: d.code || "", msg: d.error || "" };
-      }
-      return { ok: true, reply: (d && d.reply) || "" };
-    }
-    // res.error — نستخرج الحالة والجسم من صيغ الخطأ المتوقعة
-    const e = res.error || {};
-    const ctx = (e && e.context) || {};
-    if (ctx instanceof Response){
-      // supabase-js 2.116.0+: error.context هو Response فعلي
-      const status = ctx.status || e.status || 0;
-      let code = "", msg = "";
-      try {
-        let body = null;
-        const ct = String((ctx.headers && ctx.headers.get && ctx.headers.get("content-type")) || "");
-        const r = (typeof ctx.clone === "function") ? ctx.clone() : ctx;
-        try {
-          body = (ct.indexOf("application/json") !== -1) ? await r.json() : await r.text();
-        } catch(_e2){
-          try { body = await r.text(); } catch(_e3){ body = null; }
-        }
-        if (body && typeof body === "object"){
-          code = body.code || "";
-          msg = body.error || body.message || body.msg || "";
-        } else if (typeof body === "string" && body){
-          msg = body;
-        }
-      } catch(_e){ /* نكتفي برسالة المكتبة العامة */ }
-      return { ok: false, status: +status || 0, code: code || "", msg: msg || e.message || "" };
-    }
-    let body = ctx.data;
-    if (!body || typeof body !== "object") body = {};
-    const status = ctx.status || e.status || 0;
-    return { ok: false, status: +status || 0, code: body.code || "", msg: body.error || body.message || e.message || "" };
-  }
-
-  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
-
-  function withTimeout(p, ms){
-    return new Promise((resolve, reject) => {
-      const t = setTimeout(() => { const e = new Error("timeout"); e.name = "TimeoutError"; reject(e); }, ms);
-      p.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
-    });
-  }
-
-  async function callEdge(payload){
-    const c = await App.Sync.client();
-    // الهوية الحصرية من جلسة Supabase الحقيقية — لا anon ولا userId مفبرك
-    const s = await c.auth.getSession();
-    const session = s && s.data && s.data.session;
-    if (!session || !session.access_token){
-      return { ok: false, status: 401, code: "auth", msg: "سجل الدخول لاستخدام المساعد الذكي." };
-    }
-    const res = await c.functions.invoke(EDGE_FN, {
-      body: payload,
-      headers: { Authorization: "Bearer " + session.access_token }
-    });
-    return parseInvoke(res);
-  }
-
-  function retryable(status, code){
-    if (status === 0) return true;                  // خطأ شبكة/مهلة
-    if (status === 429 || status === 401 || status === 403 || status === 400 || code === "GEMINI_TIMEOUT" || code === "APMIX_TIMEOUT") return false;
-    if (status >= 500) return true;
-    return code === "server" || code === "timeout" || code === "apmix-server";
-  }
-
-  function userError(status, code){
-    if (code === "auth" || status === 401 || status === 403) return "سجل الدخول لاستخدام المساعد الذكي.";
-    if (code === "rate-limit" || status === 429) return "وصل المساعد إلى حد الاستخدام المؤقت. حاول مرة أخرى بعد قليل.";
-    if (code === "missing-key") return "المساعد غير مكوّن حاليًا — جرّب بعد قليل.";
-    if (code === "invalid-api-key") return "مفتاح API للمساعد غير صالح — تواصل مع الدعم.";
-    if (code === "apmix-config") return "خطأ في إعدادات المساعد — حاول مرة أخرى.";
-    if (code === "apmix-server") return "خطأ من مزود الذكاء الاصطناعي — حاول مرة أخرى.";
-    if (code === "GEMINI_TIMEOUT" || code === "APMIX_TIMEOUT" || code === "timeout" || status === 504) return "المساعد الذكي استغرق وقتًا أطول من المتوقع. حاول مرة أخرى.";
-    if (status >= 500 || status === 0) return "تعذر الاتصال بالمساعد حاليًا.";
-    return "حدث خطأ في المساعد — حاول مرة أخرى.";
-  }
-
-  async function attempt(payload){
+  /* ── Edge Function calls ── */
+  async function getSupabaseToken(){
+    if (!App.Sync || !App.Sync.getSession) return null;
     try {
-      const r = await withTimeout(callEdge(payload), CLIENT_TIMEOUT_MS);
-      if (r.ok) return { ok: true, reply: r.reply };
-      return { ok: false, status: r.status, code: r.code, msg: r.msg, again: retryable(r.status, r.code) };
-    } catch (e){
-      return { ok: false, status: 0, code: (e && e.name === "TimeoutError") ? "timeout" : "", msg: "", again: true };
+      const s = await App.Sync.getSession();
+      if (s.ok && s.session && s.session.access_token) return s.session.access_token;
+    } catch(_e){}
+    return null;
+  }
+
+  function getEdgeBase(){
+    const c = App.SupabaseConfig;
+    if (!c || !c.supabaseUrl) return null;
+    return c.supabaseUrl.replace(/\/$/, "") + "/functions/v1";
+  }
+
+  async function checkConfigured(){
+    const token = await getSupabaseToken();
+    const base = getEdgeBase();
+    if (!token || !base){ configured = false; return false; }
+    try {
+      const res = await fetch(base + "/ai-settings", {
+        method: "GET",
+        headers: { "Authorization": "Bearer " + token, "apikey": App.SupabaseConfig.supabaseAnonKey }
+      });
+      const data = await res.json();
+      configured = !!(data && data.ok && data.configured);
+    } catch(_e){
+      configured = false;
     }
+    return configured;
+  }
+
+  async function callEdge(message, md, context, history){
+    const token = await getSupabaseToken();
+    const base = getEdgeBase();
+    if (!token || !base) return { ok: false, error: "غير مسجّل الدخول." };
+
+    const body = { message: message, mode: md || "chat", context: context || {}, history: history || [] };
+
+    const res = await fetch(base + "/ai-assistant", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + token,
+        "apikey": App.SupabaseConfig.supabaseAnonKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (res.status === 503) return { ok: false, error: "المساعد الذكي غير مهيأ حاليًا." };
+    if (res.status === 404) return { ok: false, code: "no_key", error: "أضف مفتاح Gemini من الإعدادات." };
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.ok) {
+      return { ok: false, error: (data && data.error) || "خطأ في الاتصال بالمساعد." };
+    }
+    return { ok: true, text: data.text };
   }
 
   /* ── الإرسال ── */
@@ -265,49 +217,38 @@ App.Assistant = (function () {
     const md = MODES.indexOf(m) >= 0 ? m : "chat";
     if (!msg || sending) return;
     if (msg.length > MAX_CHARS){ UI.toast("الرسالة طويلة جدًا — الحد الأقصى " + MAX_CHARS + " حرف.", "error", "info"); return; }
-    if (typeof navigator === "undefined" || !navigator.onLine){
-      pushUser(msg, md);
-      pushAI("المساعد الذكي يحتاج إلى اتصال بالإنترنت.", { error: true });
-      return;
-    }
-
     sending = true;
     setSendingUI(true);
     stickBottom = true;
     pushUser(msg, md);
-    const pendingId = pushAI("", { typing: true });
+    mode = md;
 
-    let s;
-    try { s = await App.Sync.getSession(); } catch (_e){ s = { ok: false }; }
-    if (!s || !s.ok || !s.session){
-      signedIn = false;
-      applyShellState();
-      patchAI(pendingId, "سجل الدخول لاستخدام المساعد الذكي.", { error: true, code: "auth" });
+    /* فحص التكوين مرة واحدة فقط */
+    if (configured === null || configured === undefined){
+      await checkConfigured();
+    }
+
+    if (!configured){
+      pushAI("أضف مفتاح Gemini API من الإعدادات لتفعيل المساعد الذكي.", { error: true, retry: false, code: "no_key" });
       endSend();
       return;
     }
-    signedIn = true;
-    applyShellState();
 
-    mode = md; // المتابعات تستمر بنفس الوضع (الاختبار مثلًا) حتى يغيّر المستخدم
-    const payload = {
-      message: msg,
-      mode: md,
-      context: buildAIContext(md, S.getState()),
-      history: msgsToHistory()
-    };
+    const context = buildAIContext(md, S.getState());
+    const history = msgsToHistory();
 
-    let out = await attempt(payload);
-    if (out.again){
-      await sleep(1200);
-      if (!sending) return; // غادر المستخدم الصفحة أثناء الانتظار
-      out = await attempt(payload);
-    }
+    /* عرض مؤشر التفكير */
+    const typingId = pushAI("", { typing: true });
 
-    if (out.ok){
-      patchAI(pendingId, out.reply, {});
-    } else {
-      patchAI(pendingId, out.msg || userError(out.status, out.code), { error: true, retry: !!(out.again), code: out.code });
+    try {
+      const res = await callEdge(msg, md, context, history);
+      if (res.ok){
+        patchAI(typingId, res.text);
+      } else {
+        patchAI(typingId, res.error || "حدث خطأ غير متوقع.", { error: true, retry: true, code: res.code || "" });
+      }
+    } catch(_e){
+      patchAI(typingId, "تعذّر الاتصال بالمساعد. تحقق من اتصالك بالإنترنت.", { error: true, retry: true });
     }
     endSend();
   }
@@ -368,7 +309,6 @@ App.Assistant = (function () {
     return U.esc(String(t)).replace(/\n/g, "<br>");
   }
 
-  /* عرض Markdown آمن: كل النص يُهرب قبل أي تحويل، ولا يُدخل أي HTML من المصدر. */
   function inlineMD(s){
     s = s.replace(/`([^`\n]+)`/g, (m, c) => '<code class="ai-c">' + c + '</code>');
     s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
@@ -456,8 +396,8 @@ App.Assistant = (function () {
       actions = '<div class="ai-actions"><button class="ai-act ai-copy" data-ai="copy" data-copy="' + x.id + '" aria-label="نسخ الرد">' + COPY_ICON + '<span>نسخ</span></button></div>';
     } else if (x.error && x.retry){
       actions = '<div class="ai-actions"><button class="ai-act ai-retry" data-ai="retry" aria-label="إعادة المحاولة">' + I.get("refresh", 12) + '<span>إعادة المحاولة</span></button></div>';
-    } else if (x.error && x.code === "auth"){
-      actions = '<div class="ai-actions"><button class="ai-act ai-login danger" data-ai="login" aria-label="تسجيل الدخول">' + I.get("user", 12) + '<span>تسجيل الدخول</span></button></div>';
+    } else if (x.error && x.code === "no_key"){
+      actions = '<div class="ai-actions"><a class="ai-act ai-settings" href="#/settings" data-ai="settings" aria-label="الإعدادات">' + I.get("settings", 12) + '<span>الإعدادات</span></a></div>';
     }
     return '<div class="' + cls + '" data-id="' + x.id + '">' + av + '<div class="ai-bubble">' + meta + tag + body + actions + '</div></div>';
   }
@@ -543,56 +483,35 @@ App.Assistant = (function () {
     pendingMistakeId = null;
     pendingAuto = null;
     stickBottom = true;
+    configured = null;
     const input = $("ai-input");
     if (input){ input.value = ""; autosize(); }
     paint();
-    refreshGate();
     if (input) input.focus();
   }
 
-  /* ── حالات الصفحة: تسجيل الدخول والاتصال ── */
-  async function refreshGate(){
-    let ok = false;
-    try { const s = await App.Sync.getSession(); ok = !!(s && s.ok && s.session); } catch (_e){ ok = false; }
-    signedIn = ok;
-    applyShellState();
-  }
-
   function applyShellState(){
-    const on = (typeof navigator !== "undefined") ? navigator.onLine : true;
     const status = $("ai-status"), txt = $("ai-status-txt");
-    if (status) status.classList.toggle("off", !on);
-    if (txt) txt.textContent = on ? "جاهز للمساعدة" : "غير متصل";
     const notice = $("ai-notice");
-    if (!notice) return;
-    if (!on){
-      notice.className = "ai-notice show offline";
-      notice.innerHTML = WIFI_OFF_ICON + '<span>المساعد الذكي يحتاج إلى اتصال بالإنترنت.</span>';
-    } else if (!signedIn){
-      notice.className = "ai-notice show warn";
-      notice.innerHTML = '<span>سجل الدخول لاستخدام المساعد الذكي.</span>' +
-        '<button class="ai-act ai-login danger" data-ai="login" aria-label="تسجيل الدخول">' + I.get("user", 12) + '<span>تسجيل الدخول</span></button>';
+    if (configured === false){
+      if (status) status.classList.add("off");
+      if (txt) txt.textContent = "غير مهيأ";
+      if (notice){
+        notice.className = "ai-notice show warn";
+        notice.innerHTML = '<span>أضف مفتاح Gemini من الإعدادات لتفعيل المساعد الذكي. <a href="#/settings" class="ai-settings-link">فتح الإعدادات</a></span>';
+      }
     } else {
-      notice.className = "ai-notice";
-      notice.innerHTML = "";
+      if (status) status.classList.remove("off");
+      if (txt) txt.textContent = "جاهز للمساعدة";
+      if (notice) notice.className = "ai-notice";
     }
-  }
-
-  function doLogin(){
-    if (!App.Sync || !App.Sync.signIn){
-      UI.toast("طبقة السحابة غير محمّلة — تحقق من الاتصال.", "error", "info");
-      return;
-    }
-    Promise.resolve(App.Sync.signIn()).then(res => {
-      if (res && res.error) UI.toast("تعذر فتح تسجيل الدخول — حاول مرة أخرى.", "error", "info");
-    }).catch(() => {});
   }
 
   async function copyMessage(id, btn){
     const x = msgs.find(m => m.id === id);
     if (!x || !x.text) return;
     let okc = false;
-    try { await navigator.clipboard.writeText(x.text); okc = true; } catch (_e){ okc = false; }
+    try { await navigator.clipboard.writeText(x.text); okc = true; } catch(_e){ okc = false; }
     btn.innerHTML = okc ? CHECK_ICON + '<span>تم النسخ</span>' : COPY_ICON + '<span>نسخ</span>';
     btn.classList.toggle("done", okc);
     setTimeout(() => {
@@ -620,11 +539,9 @@ App.Assistant = (function () {
       input.addEventListener("input", autosize);
     }
     const chat = $("ai-chat");
-    /* تمرير ذكي: نلتصق بالأسفل إلا إذا صعد المستخدم */
     if (chat) chat.addEventListener("scroll", () => {
       stickBottom = (chat.scrollHeight - chat.scrollTop - chat.clientHeight) < 120;
     }, { passive: true });
-    /* تفويض: الأزرار الداخلية تُعاد لصقها في كل paint، فنفوض النقرات على الحاوية الثابتة. */
     if (chat){
       chat.addEventListener("click", e => {
         const q = e.target.closest("[data-ai='qa']");
@@ -635,25 +552,22 @@ App.Assistant = (function () {
           send(QUICK_START[m] || "", m);
           return;
         }
-        const rt = e.target.closest("[data-ai='retry']");
-        if (rt){
-          const last = lastUserMsg();
-          if (last) send(last.text, last.mode || "chat");
-          return;
-        }
         const cp = e.target.closest("[data-ai='copy']");
         if (cp){
           copyMessage(cp.getAttribute("data-copy"), cp);
           return;
         }
-        const lg = e.target.closest("[data-ai='login']");
-        if (lg){ doLogin(); return; }
-      });
-    }
-    const notice = $("ai-notice");
-    if (notice){
-      notice.addEventListener("click", e => {
-        if (e.target.closest("[data-ai='login']")) doLogin();
+        const retry = e.target.closest("[data-ai='retry']");
+        if (retry){
+          const last = lastUserMsg();
+          if (last) send(last.text, last.mode);
+          return;
+        }
+        const settings = e.target.closest("[data-ai='settings']");
+        if (settings){
+          App.Router.go("settings");
+          return;
+        }
       });
     }
     root.querySelectorAll("[data-ai='clear']").forEach(b => b.addEventListener("click", resetAll));
@@ -661,7 +575,7 @@ App.Assistant = (function () {
   }
 
   /* ── الصفحة ── */
-  function render(root, ctx){
+  async function render(root, ctx){
     if (ctx && ctx.mistake){
       pendingMistakeId = ctx.mistake;
       pendingAuto = { m: "error_bank_help", text: "اشرح لي هذا الخطأ من بنك أخطائي وساعدني أفهمه ولا تكتفِ بالإجابة — اشرح السبب." };
@@ -691,11 +605,19 @@ App.Assistant = (function () {
 
     paint();
     applyShellState();
-    refreshGate();
     const input = $("ai-input");
     if (input){ autosize(); setTimeout(() => input.focus(), 120); }
 
     bind(root);
+
+    /* فحص التكوين في الخلفية */
+    checkConfigured().then(() => {
+      applyShellState();
+      if (!configured){
+        pushAI("أضف مفتاح Gemini API من الإعدادات لتفعيل المساعد الذكي.\nاذهب إلى الإعدادات ← المساعد الذكي وأدخل المفتاح.", { error: true, code: "no_key" });
+      }
+    });
+
     if (pendingAuto){
       const auto = pendingAuto;
       pendingAuto = null;
@@ -703,7 +625,7 @@ App.Assistant = (function () {
     }
   }
 
-  /* ── واجهة عامة (تستخدمها بنك الأخطاء وغيرها) ── */
+  /* ── واجهة عامة ── */
   function askAboutMistake(id){
     pendingMistakeId = id;
     pendingAuto = { m: "error_bank_help", text: "اشرح لي هذا الخطأ من بنك أخطائي وساعدني أفهمه ولا تكتفِ بالإجابة — اشرح السبب." };
