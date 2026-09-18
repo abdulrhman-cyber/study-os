@@ -150,7 +150,6 @@ Deno.serve(async (req: Request) => {
       const model = (body.model || "gemini-2.5-flash-lite").trim();
 
       if (!apiKey) return json({ ok: false, error: "أدخل مفتاح Gemini API." }, 400);
-      if (!apiKey.startsWith("AIza")) return json({ ok: false, error: "صيغة المفتاح غير صالحة — يجب أن يبدأ بـ AIza." }, 400);
       if (model !== "gemini-2.5-flash-lite") return json({ ok: false, error: "النموذج المدعوم حاليًا: gemini-2.5-flash-lite فقط." }, 400);
 
       const encrypted = await encrypt(apiKey, ENCRYPTION_KEY);

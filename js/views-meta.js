@@ -356,9 +356,9 @@ const syncBody =
       '<div class="set-row"><div class="sr-txt"><b>مفتاح Gemini API</b><span>المفتاح يُخزّن مشفّرًا في السحابة ولا يظهر لأحد — حتى المطور لا يستطيع قراءته.</span></div></div>' +
       '<div class="set-row"><div class="sr-txt"><b>الحالة</b><span id="ai-settings-status">جارٍ الفحص…</span></div>' +
         '<div class="sr-ctl"><span class="badge neutral" id="ai-settings-badge">—</span></div></div>' +
-      '<div class="set-row"><div class="sr-txt"><b>المفتاح</b><span>أدخل مفتاح Gemini API الخاص بك (يبدأ بـ AIza)</span></div>' +
+      '<div class="set-row"><div class="sr-txt"><b>المفتاح</b><span>أدخل Gemini API Key</span></div>' +
         '<div class="sr-ctl" style="display:flex;gap:8px;align-items:center">' +
-          '<input type="password" class="input" id="ai-settings-key" placeholder="AIzaSy..." style="min-width:200px" autocomplete="off">' +
+          '<input type="password" class="input" id="ai-settings-key" placeholder="أدخل Gemini API Key" style="min-width:200px" autocomplete="off">' +
           '<button class="btn sm" id="ai-settings-toggle-vis" aria-label="إظهار/إخفاء المفتاح">' + I.get("info", 13) + '</button>' +
         '</div></div>' +
       '<div class="set-row"><div class="sr-txt"><b>النموذج</b><span>gemini-2.5-flash-lite</span></div></div>' +
