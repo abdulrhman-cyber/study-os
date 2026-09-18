@@ -1658,7 +1658,7 @@ html[data-theme="light"] .ai-md pre{background:rgba(9,10,12,.8)}
 .ls-stat-unread .ls-stat-val{color:var(--text-3)}
 .ls-stat-fav .ls-stat-val{color:#E8CF98}
 
-.ls-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ls-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
 .ls-toolbar-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0;flex-wrap:wrap}
 .ls-toolbar-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .ls-search-wrap{position:relative;flex:1;min-width:200px;max-width:360px}
