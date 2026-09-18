@@ -163,10 +163,18 @@ async function callAPMix(prompt: string, contents: { role: string; parts: { text
   if (raw) { try { data = JSON.parse(raw); } catch (_e) { /* جسم خطأ غير JSON */ } }
 
   if (!res.ok) {
-    if (res.status === 429) return { rate: true };
-    if (res.status === 400 || res.status === 403) return { config: res.status };
-    if (res.status === 408 || res.status === 504) return { timeout: true };
-    return { server: res.status };
+    // سجل تفاصيل الخطأ من APMix للتشخيص (بدون مفتاح API)
+    console.error("AI: apmix error response", JSON.stringify({
+      status: res.status,
+      statusText: res.statusText,
+      body: raw ? raw.slice(0, 500) : "empty"
+    }));
+
+    if (res.status === 429) return { rate: true, status: 429 };
+    if (res.status === 401) return { config: 401, status: 401 }; // مفتاح غير صحيح
+    if (res.status === 400 || res.status === 403) return { config: res.status, status: res.status };
+    if (res.status === 408 || res.status === 504) return { timeout: true, status: res.status };
+    return { server: res.status, status: res.status, body: raw ? raw.slice(0, 500) : "" };
   }
 
   const choice = data && data.choices && data.choices[0];
@@ -253,12 +261,20 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, code: "rate-limit", error: "وصل المساعد إلى حد الاستخدام المؤقت. حاول مرة أخرى بعد قليل." }, 429);
   }
   if (result.config) {
-    console.error("AI: apmix rejected the request (status " + result.config + ") - check APMIX_API_KEY validity and generationConfig.");
-    return json({ ok: false, code: "server", error: "حدث خطأ مؤقت في المساعد. حاول مرة أخرى." }, 502);
+    // 401 = invalid API key, 400/403 = bad request
+    const status = result.status || result.config;
+    if (status === 401) {
+      return json({ ok: false, code: "invalid-api-key", error: "مفتاح APMix غير صالح أو منتهي الصلاحية." }, 502);
+    }
+    return json({ ok: false, code: "apmix-config", error: "طلب غير صالح للمساعد (رمز: " + status + ")." }, 502);
   }
   if (result.empty || result.timeout) {
     console.error("AI: apmix did not return in time", JSON.stringify({ ms: Date.now() - t0 }));
     return json({ ok: false, code: "APMIX_TIMEOUT", error: "المساعد الذكي استغرق وقتًا أطول من المتوقع. حاول مرة أخرى." }, 504);
+  }
+  if (result.server) {
+    console.error("AI: apmix server error", JSON.stringify({ status: result.status, body: result.body }));
+    return json({ ok: false, code: "apmix-server", error: "خطأ من مزود الذكاء الاصطناعي (رمز: " + (result.status || "غير معروف") + ")." }, 502);
   }
   return json({ ok: false, code: "server", error: "حدث خطأ مؤقت في المساعد. حاول مرة أخرى." }, 502);
 });

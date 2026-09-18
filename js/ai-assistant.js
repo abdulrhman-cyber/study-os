@@ -232,16 +232,19 @@ App.Assistant = (function () {
 
   function retryable(status, code){
     if (status === 0) return true;                  // خطأ شبكة/مهلة
-    if (status === 429 || status === 401 || status === 403 || status === 400 || code === "GEMINI_TIMEOUT") return false;
+    if (status === 429 || status === 401 || status === 403 || status === 400 || code === "GEMINI_TIMEOUT" || code === "APMIX_TIMEOUT") return false;
     if (status >= 500) return true;
-    return code === "server" || code === "timeout";
+    return code === "server" || code === "timeout" || code === "apmix-server";
   }
 
   function userError(status, code){
     if (code === "auth" || status === 401 || status === 403) return "سجل الدخول لاستخدام المساعد الذكي.";
     if (code === "rate-limit" || status === 429) return "وصل المساعد إلى حد الاستخدام المؤقت. حاول مرة أخرى بعد قليل.";
     if (code === "missing-key") return "المساعد غير مكوّن حاليًا — جرّب بعد قليل.";
-    if (code === "GEMINI_TIMEOUT" || code === "timeout" || status === 504) return "المساعد الذكي استغرق وقتًا أطول من المتوقع. حاول مرة أخرى.";
+    if (code === "invalid-api-key") return "مفتاح API للمساعد غير صالح — تواصل مع الدعم.";
+    if (code === "apmix-config") return "خطأ في إعدادات المساعد — حاول مرة أخرى.";
+    if (code === "apmix-server") return "خطأ من مزود الذكاء الاصطناعي — حاول مرة أخرى.";
+    if (code === "GEMINI_TIMEOUT" || code === "APMIX_TIMEOUT" || code === "timeout" || status === 504) return "المساعد الذكي استغرق وقتًا أطول من المتوقع. حاول مرة أخرى.";
     if (status >= 500 || status === 0) return "تعذر الاتصال بالمساعد حاليًا.";
     return "حدث خطأ في المساعد — حاول مرة أخرى.";
   }
