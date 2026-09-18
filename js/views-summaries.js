@@ -17,7 +17,7 @@ App.Views = App.Views || {};
 
   const STATUS_LABELS = { unread: "لم تبدأ", reading: "قيد القراءة", read: "تمت القراءة" };
   const STATUS_ICONS = { unread: "clock", reading: "focus", read: "check" };
-  const STATUS_COLORS = { unread: "var(--gold-2)", reading: "var(--em-3)", read: "var(--emerald)" };
+  const STATUS_CLS = { unread: "ls-st-unread", reading: "ls-st-reading", read: "ls-st-read" };
 
   function edgeBase(){
     const c = App.SupabaseConfig;
@@ -43,6 +43,8 @@ App.Views = App.Views || {};
 
   async function loadSummaries(subjectId){
     loading = true;
+    const listEl = $("ls-list");
+    if (listEl) listEl.innerHTML = skeletonHTML();
     const data = await apiFetch("GET", "?subject_id=" + encodeURIComponent(subjectId));
     loading = false;
     if (data.ok) summariesCache = data.summaries || [];
@@ -84,77 +86,116 @@ App.Views = App.Views || {};
   }
 
   function stats(list){
-    const total = list.length;
-    const read = list.filter(s => s.status === "read").length;
-    const unread = list.filter(s => s.status === "unread").length;
-    const fav = list.filter(s => s.isFavorite).length;
-    return { total, read, unread, fav };
+    return {
+      total: list.length,
+      read: list.filter(s => s.status === "read").length,
+      reading: list.filter(s => s.status === "reading").length,
+      unread: list.filter(s => s.status === "unread").length,
+      fav: list.filter(s => s.isFavorite).length
+    };
   }
 
-  function subjectSelector(){
+  /* ── Subject Tabs ── */
+  function subjectTabsHTML(){
     const subs = D.subjects.filter(s => s.id !== "general");
-    return '<div class="field"><label>المادة</label>' +
-      '<select class="input" id="ls-subject">' +
-        subs.map(s => '<option value="' + s.id + '"' + (selectedSubject === s.id ? ' selected' : '') + '>' + U.esc(s.name) + '</option>').join("") +
-      '</select></div>';
+    return '<div class="ls-subjects" id="ls-subjects">' +
+      subs.map(s => {
+        const active = selectedSubject === s.id;
+        return '<button class="ls-subject-pill' + (active ? " active" : "") + '" data-ls-subj="' + s.id + '" style="' + (active ? "border-color:" + s.accent + ";background:" + s.accent + "18;box-shadow:0 0 0 1px " + s.accent + "40" : "") + '">' +
+          '<span class="ls-pill-dot" style="background:' + s.accent + '"></span>' +
+          '<span class="ls-pill-name">' + U.esc(s.name) + '</span>' +
+        '</button>';
+      }).join("") +
+    '</div>';
   }
 
-  function dashboardHTML(st){
+  /* ── Dashboard Stats ── */
+  function dashboardHTML(){
     const list = filtered();
     const s = stats(list);
-    return '<div class="xp-stats">' +
-      UI.statCard("notes", s.total, "ملخصات") +
-      UI.statCard("check", s.read, "مقروءة", "emerald") +
-      UI.statCard("clock", s.unread, "لم تُقرأ", "gold") +
-      UI.statCard("star", s.fav, "مفضلة") +
+    return '<div class="ls-stats">' +
+      '<div class="ls-stat"><div class="ls-stat-val">' + s.total + '</div><div class="ls-stat-lbl">ملخص</div></div>' +
+      '<div class="ls-stat ls-stat-read"><div class="ls-stat-val">' + s.read + '</div><div class="ls-stat-lbl">مقروءة</div></div>' +
+      '<div class="ls-stat ls-stat-reading"><div class="ls-stat-val">' + s.reading + '</div><div class="ls-stat-lbl">قيد القراءة</div></div>' +
+      '<div class="ls-stat ls-stat-unread"><div class="ls-stat-val">' + s.unread + '</div><div class="ls-stat-lbl">لم تُقرأ</div></div>' +
+      '<div class="ls-stat ls-stat-fav"><div class="ls-stat-val">' + s.fav + '</div><div class="ls-stat-lbl">مفضلة</div></div>' +
     '</div>';
   }
 
-  function filterBarHTML(){
+  /* ── Toolbar ── */
+  function toolbarHTML(){
     const statuses = [["all", "الكل"], ["unread", "لم تبدأ"], ["reading", "قيد القراءة"], ["read", "تمت القراءة"]];
-    return '<div class="filter-bar" style="flex-wrap:wrap;gap:8px;margin-bottom:16px">' +
-      '<input class="input" id="ls-search" placeholder="ابحث في الملخصات..." value="' + U.esc(searchQuery) + '" style="min-width:180px;flex:1;max-width:300px">' +
-      '<div class="seg" style="flex-wrap:wrap">' +
-        statuses.map(([v, t]) => '<button class="' + (filterStatus === v ? "active" : "") + '" data-ls-filter="' + v + '">' + t + '</button>').join("") +
+    return '<div class="ls-toolbar">' +
+      '<div class="ls-toolbar-left">' +
+        '<div class="ls-search-wrap">' +
+          '<span class="ls-search-icon">' + I.get("search", 15) + '</span>' +
+          '<input class="ls-search-input" id="ls-search" placeholder="ابحث في الملخصات..." value="' + U.esc(searchQuery) + '">' +
+        '</div>' +
+        '<div class="ls-filter-group">' +
+          statuses.map(([v, t]) => '<button class="ls-filter-chip' + (filterStatus === v ? " active" : "") + '" data-ls-filter="' + v + '">' + t + '</button>').join("") +
+        '</div>' +
+        '<button class="ls-filter-chip' + (filterFav ? " active" : "") + '" data-ls-fav>' + I.get("star", 12) + ' المفضلة</button>' +
       '</div>' +
-      '<button class="btn sm' + (filterFav ? " primary" : " ghost") + '" data-ls-fav>' + I.get("star", 13) + ' المفضلة</button>' +
-      '<select class="input" id="ls-sort" style="min-width:120px">' +
-        '<option value="lecture_number"' + (sortBy === "lecture_number" ? " selected" : "") + '>رقم المحاضرة</option>' +
-        '<option value="newest"' + (sortBy === "newest" ? " selected" : "") + '>الأحدث</option>' +
-        '<option value="oldest"' + (sortBy === "oldest" ? " selected" : "") + '>الأقدم</option>' +
-        '<option value="name"' + (sortBy === "name" ? " selected" : "") + '>الاسم</option>' +
-      '</select>' +
+      '<div class="ls-toolbar-right">' +
+        '<select class="ls-sort-select" id="ls-sort">' +
+          '<option value="lecture_number"' + (sortBy === "lecture_number" ? " selected" : "") + '>رقم المحاضرة</option>' +
+          '<option value="newest"' + (sortBy === "newest" ? " selected" : "") + '>الأحدث</option>' +
+          '<option value="oldest"' + (sortBy === "oldest" ? " selected" : "") + '>الأقدم</option>' +
+          '<option value="name"' + (sortBy === "name" ? " selected" : "") + '>الاسم</option>' +
+        '</select>' +
+        '<button class="btn primary sm" id="ls-add">' + I.get("plus", 13) + ' <span>إضافة ملخص</span></button>' +
+      '</div>' +
     '</div>';
   }
 
+  /* ── Skeleton Loading ── */
+  function skeletonHTML(){
+    let cards = "";
+    for (let i = 0; i < 6; i++){
+      cards += '<div class="ls-card ls-skeleton">' +
+        '<div class="ls-card-top"><div class="ls-sk-icon sk-pulse"></div><div style="flex:1"><div class="sk-bar sk-w60"></div><div class="sk-bar sk-w40 sk-sm"></div></div></div>' +
+        '<div class="ls-card-body"><div class="sk-bar sk-w80"></div><div class="sk-bar sk-w50 sk-sm"></div></div>' +
+        '<div class="ls-card-foot"><div class="sk-bar sk-w30 sk-sm"></div><div class="sk-bar sk-w20 sk-sm"></div></div>' +
+      '</div>';
+    }
+    return cards;
+  }
+
+  /* ── Summary Card ── */
   function summaryCard(s){
     const subj = D.subjectById(s.subjectId);
-    const statusIcon = STATUS_ICONS[s.status] || "clock";
-    const statusColor = STATUS_COLORS[s.status] || "var(--gold-2)";
-    return '<div class="card glass-1 ls-card" data-ls-id="' + s.id + '">' +
-      '<div class="ls-card-head">' +
-        '<div class="ls-card-icon" style="color:' + (subj.accent || "var(--gold-2)") + '">' + I.get("notes", 24) + '</div>' +
-        '<div class="ls-card-meta">' +
-          '<div class="ls-card-title">' + U.esc(s.title) + '</div>' +
-          '<div class="ls-card-sub muted small">' +
-            (s.lecture_number != null ? 'محاضرة ' + s.lecture_number + ' · ' : '') +
-            (s.unit ? U.esc(s.unit) + ' · ' : '') +
-            fmtSize(s.file_size) +
-          '</div>' +
+    const accent = subj.accent || "var(--gold-2)";
+    const stCls = STATUS_CLS[s.status] || "ls-st-unread";
+    const stIcon = STATUS_ICONS[s.status] || "clock";
+    const stLabel = STATUS_LABELS[s.status] || "لم تبدأ";
+    const meta = [];
+    if (s.lecture_number != null) meta.push("محاضرة " + s.lecture_number);
+    if (s.unit) meta.push(U.esc(s.unit));
+    meta.push(fmtSize(s.file_size));
+
+    return '<div class="ls-card" data-ls-id="' + s.id + '">' +
+      '<div class="ls-card-top">' +
+        '<div class="ls-card-pdf">' +
+          '<span class="ls-pdf-icon">' + I.get("notes", 22) + '</span>' +
+          '<span class="ls-pdf-ext">PDF</span>' +
         '</div>' +
-        (s.isFavorite ? '<span style="color:var(--gold-2)">' + I.get("star", 16) + '</span>' : '') +
+        '<div class="ls-card-info">' +
+          '<div class="ls-card-title" title="' + U.esc(s.title) + '">' + U.esc(s.title) + '</div>' +
+          '<div class="ls-card-meta">' + meta.join(" · ") + '</div>' +
+        '</div>' +
+        (s.isFavorite ? '<button class="ls-fav-badge" data-ls-fav-toggle="' + s.id + '" title="إزالة من المفضلة">' + I.get("star", 15) + '</button>' :
+          '<button class="ls-fav-badge ls-fav-inactive" data-ls-fav-toggle="' + s.id + '" title="إضافة للمفضلة">' + I.get("star", 15) + '</button>') +
       '</div>' +
-      '<div class="ls-card-status">' +
-        '<span class="chip" style="color:' + statusColor + ';border-color:' + statusColor + '30">' + I.get(statusIcon, 12) + ' ' + STATUS_LABELS[s.status] + '</span>' +
-        '<span class="muted small num">' + U.fmtDate((s.createdAt || "").slice(0,10), { short: true }) + '</span>' +
+      '<div class="ls-card-body">' +
+        '<span class="ls-status-badge ' + stCls + '">' + I.get(stIcon, 11) + ' ' + stLabel + '</span>' +
+        '<span class="ls-card-date num">' + U.fmtDate((s.createdAt || "").slice(0,10), { short: true }) + '</span>' +
       '</div>' +
-      '<div class="ls-card-actions">' +
-        '<button class="btn sm primary" data-ls-open="' + s.id + '">' + I.get("play", 13) + ' فتح</button>' +
-        '<button class="btn sm ghost" data-ls-dl="' + s.id + '">' + I.get("export", 13) + ' تحميل</button>' +
+      '<div class="ls-card-foot">' +
+        '<button class="btn sm primary" data-ls-open="' + s.id + '">' + I.get("play", 12) + ' قراءة</button>' +
+        '<button class="btn sm ghost" data-ls-dl="' + s.id + '">' + I.get("export", 12) + ' تحميل</button>' +
         '<div class="ls-menu-wrap">' +
-          '<button class="btn sm ghost ls-menu-btn" data-ls-menu="' + s.id + '">⋮</button>' +
+          '<button class="btn sm ghost ls-menu-btn" data-ls-menu="' + s.id + '" title="خيارات">⋯</button>' +
           '<div class="ls-dropdown" id="ls-dd-' + s.id + '" hidden>' +
-            '<button data-ls-fav-toggle="' + s.id + '">' + I.get("star", 13) + (s.isFavorite ? ' إزالة من المفضلة' : ' إضافة للمفضلة') + '</button>' +
             '<button data-ls-edit="' + s.id + '">' + I.get("edit", 13) + ' تعديل البيانات</button>' +
             '<button data-ls-replace="' + s.id + '">' + I.get("refresh", 13) + ' استبدال ملف PDF</button>' +
             '<button data-ls-delete="' + s.id + '" class="danger">' + I.get("trash", 13) + ' حذف</button>' +
@@ -164,20 +205,37 @@ App.Views = App.Views || {};
     '</div>';
   }
 
+  /* ── Empty State ── */
   function emptyHTML(){
-    return UI.empty("notes", "لا توجد ملخصات لهذه المادة", "أضف أول ملخص محاضرة لتبدأ.", "");
+    const subj = selectedSubject ? D.subjectById(selectedSubject) : null;
+    const name = subj ? subj.name : "هذه المادة";
+    return '<div class="ls-empty">' +
+      '<div class="ls-empty-icon">' + I.get("notes", 48) + '</div>' +
+      '<h3 class="ls-empty-title">لا توجد ملخصات لـ' + U.esc(name) + ' بعد</h3>' +
+      '<p class="ls-empty-sub">ابدأ بإضافة أول ملخص محاضرة لتبدأ في تنظيم مذاكرتك.</p>' +
+      '<button class="btn primary" id="ls-empty-add">' + I.get("plus", 14) + ' إضافة ملخص</button>' +
+    '</div>';
   }
 
   function loginRequiredHTML(){
-    return UI.empty("user", "سجل الدخول أولاً", "سجل الدخول لحفظ ملفات المحاضرات ومزامنتها بين أجهزتك.", '<a class="btn primary" href="#/settings">' + I.get("user", 14) + ' تسجيل الدخول</a>');
+    return '<div class="ls-empty">' +
+      '<div class="ls-empty-icon">' + I.get("user", 48) + '</div>' +
+      '<h3 class="ls-empty-title">سجل الدخول أولاً</h3>' +
+      '<p class="ls-empty-sub">سجل الدخول لحفظ ملفات المحاضرات ومزامنتها بين أجهزتك.</p>' +
+      '<a class="btn primary" href="#/settings">' + I.get("user", 14) + ' تسجيل الدخول</a>' +
+    '</div>';
   }
 
+  /* ── Upload Modal ── */
   function renderUploadModal(files, subjectId){
     let rows = files.map((f, i) =>
-      '<div class="ls-upload-row">' +
-        '<div><b>' + U.esc(f.name) + '</b><span class="muted small"> — ' + fmtSize(f.size) + '</span></div>' +
+      '<div class="ls-upload-item">' +
+        '<div class="ls-upload-file">' +
+          '<span class="ls-upload-pdf">' + I.get("notes", 18) + '</span>' +
+          '<div><div class="ls-upload-name">' + U.esc(f.name) + '</div><div class="ls-upload-size muted small">' + fmtSize(f.size) + '</div></div>' +
+        '</div>' +
         '<input class="input ls-up-title" data-idx="' + i + '" placeholder="اسم الملخص" value="' + U.esc(f.name.replace(/\.pdf$/i, "")) + '">' +
-        '<input class="input ls-up-num" data-idx="' + i + '" type="number" min="1" placeholder="رقم المحاضرة" style="width:100px">' +
+        '<input class="input ls-up-num" data-idx="' + i + '" type="number" min="1" placeholder="رقم المحاضرة">' +
       '</div>'
     ).join("");
     const m = UI.openModal(UI.modalShell(
@@ -211,11 +269,11 @@ App.Views = App.Views || {};
     });
   }
 
+  /* ── PDF Viewer ── */
   async function openPDFViewer(s){
     const token = await getToken();
     const base = edgeBase();
     if (!token || !base){ UI.toast("خطأ في الاتصال.", "error", "info"); return; }
-    const fileUrl = base + "/lecture-summaries?action=signed-url&path=" + encodeURIComponent(s.file_path);
 
     let signedUrl = null;
     try {
@@ -243,35 +301,40 @@ App.Views = App.Views || {};
       s.status = "reading";
     }
 
-    const viewerHTML =
-      '<div class="ls-viewer">' +
-        '<div class="ls-viewer-head">' +
-          '<div><b>' + U.esc(s.title) + '</b>' + (s.lecture_number != null ? ' <span class="muted">— محاضرة ' + s.lecture_number + '</span>' : '') + '</div>' +
-          '<div class="ls-viewer-actions">' +
-            '<a class="btn sm ghost" href="' + signedUrl + '" target="_blank" download="' + U.esc(s.file_name) + '">' + I.get("export", 13) + ' تحميل</a>' +
-            '<button class="btn sm ghost" id="ls-viewer-close">' + I.get("close", 14) + '</button>' +
+    const subj = D.subjectById(s.subjectId);
+    document.body.insertAdjacentHTML("beforeend", '<div class="ls-overlay" id="ls-overlay"></div>');
+    document.body.insertAdjacentHTML("beforeend",
+      '<div class="ls-viewer-wrap" id="ls-viewer-wrap">' +
+        '<div class="ls-viewer">' +
+          '<div class="ls-viewer-head">' +
+            '<div class="ls-viewer-title">' +
+              '<span class="ls-viewer-icon" style="color:' + (subj.accent || "var(--gold-2)") + '">' + I.get("notes", 18) + '</span>' +
+              '<div><b>' + U.esc(s.title) + '</b>' + (s.lecture_number != null ? ' <span class="muted small">— محاضرة ' + s.lecture_number + '</span>' : '') + '</div>' +
+            '</div>' +
+            '<div class="ls-viewer-actions">' +
+              '<a class="btn sm ghost" href="' + signedUrl + '" target="_blank" download="' + U.esc(s.file_name) + '">' + I.get("export", 13) + ' تحميل</a>' +
+              '<button class="btn sm ghost" id="ls-viewer-close">' + I.get("close", 14) + '</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="ls-viewer-body">' +
+            '<iframe src="' + signedUrl + '" class="ls-viewer-frame" title="' + U.esc(s.title) + '"></iframe>' +
           '</div>' +
         '</div>' +
-        '<div class="ls-viewer-body">' +
-          '<iframe src="' + signedUrl + '" class="ls-viewer-frame" title="' + U.esc(s.title) + '"></iframe>' +
-        '</div>' +
-      '</div>';
-
-    document.body.insertAdjacentHTML("beforeend", '<div class="ls-overlay" id="ls-overlay"></div>');
-    document.body.insertAdjacentHTML("beforeend", '<div class="ls-viewer-wrap" id="ls-viewer-wrap">' + viewerHTML + '</div>');
-
-    const overlay = $("ls-overlay");
-    const wrap = $("ls-viewer-wrap");
-    const closeBtn = $("ls-viewer-close");
+      '</div>'
+    );
 
     function closeViewer(){
-      if (overlay) overlay.remove();
-      if (wrap) wrap.remove();
+      const o = $("ls-overlay"), w = $("ls-viewer-wrap");
+      if (o) o.remove();
+      if (w) w.remove();
     }
+    const closeBtn = $("ls-viewer-close");
+    const overlay = $("ls-overlay");
     if (closeBtn) closeBtn.addEventListener("click", closeViewer);
     if (overlay) overlay.addEventListener("click", closeViewer);
   }
 
+  /* ── Edit Modal ── */
   function renderEditModal(s){
     const m = UI.openModal(UI.modalShell(
       I.get("edit", 18) + ' تعديل الملخص',
@@ -297,25 +360,19 @@ App.Views = App.Views || {};
       if (!title){ UI.toast("أدخل اسم الملخص.", "error", "info"); return; }
       btn.disabled = true;
       const res = await apiFetch("PUT", "", { id: s.id, title, lecture_number: num, unit, status });
-      if (res.ok){
-        UI.closeModal();
-        UI.toast("تم تحديث الملخص.", "success", "check");
-        refresh();
-      } else {
-        UI.toast(res.error || "تعذّر التحديث.", "error", "close");
-        btn.disabled = false;
-      }
+      if (res.ok){ UI.closeModal(); UI.toast("تم تحديث الملخص.", "success", "check"); refresh(); }
+      else { UI.toast(res.error || "تعذّر التحديث.", "error", "close"); btn.disabled = false; }
     });
   }
 
+  /* ── Replace Modal ── */
   function renderReplaceModal(s){
-    const fileInput = '<input type="file" id="ls-replace-file" accept=".pdf,application/pdf" hidden>';
     const m = UI.openModal(UI.modalShell(
       I.get("refresh", 18) + ' استبدال ملف PDF',
       '<p class="muted small">الملف الحالي: <b>' + U.esc(s.file_name) + '</b> (' + fmtSize(s.file_size) + ')</p>' +
       '<div class="field"><label>الملف الجديد (PDF)</label>' +
         '<label class="btn emerald block" style="cursor:pointer" id="ls-replace-label">' + I.get("export", 14) + ' اختر ملف PDF' +
-          fileInput +
+          '<input type="file" id="ls-replace-file" accept=".pdf,application/pdf" hidden>' +
         '</label>' +
         '<div id="ls-replace-info" class="muted small" style="margin-top:8px"></div>' +
       '</div>',
@@ -350,6 +407,7 @@ App.Views = App.Views || {};
     });
   }
 
+  /* ── Main Render ── */
   function render(root){
     document.body.classList.add("ai-route");
     if (!isLoggedIn()){
@@ -365,55 +423,31 @@ App.Views = App.Views || {};
 
     root.innerHTML =
       '<div class="page-head"><div><div class="page-title">📚 ملخصات المحاضرات</div>' +
-      '<div class="page-sub">أدر ملخصات محاضراتك لكل مادة</div></div>' +
-      '<div class="head-actions">' +
-        '<button class="btn primary" id="ls-add">' + I.get("plus", 14) + ' إضافة ملخص</button>' +
-      '</div></div>' +
-      subjectSelector() +
+      '<div class="page-sub">أدر ملخصات محاضراتك لكل مادة — ارفع ملفات PDF ونظّمها بسهولة</div></div></div>' +
+      subjectTabsHTML() +
       '<div id="ls-dashboard"></div>' +
-      '<div id="ls-filters"></div>' +
+      '<div id="ls-toolbar-wrap"></div>' +
       '<div id="ls-list" class="ls-grid"></div>';
 
     bind(root);
     refresh();
   }
 
+  /* ── Bind Events ── */
   function bind(root){
-    const subjSel = root.querySelector("#ls-subject");
-    if (subjSel) subjSel.addEventListener("change", () => {
-      selectedSubject = subjSel.value;
-      refresh();
-    });
-
-    root.querySelector("#ls-add").addEventListener("click", () => {
-      if (!selectedSubject){ UI.toast("اختر مادة أولًا.", "error", "info"); return; }
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = ".pdf,application/pdf";
-      input.multiple = true;
-      input.addEventListener("change", () => {
-        const files = Array.from(input.files || []);
-        if (!files.length) return;
-        const invalid = files.find(f => f.type !== "application/pdf");
-        if (invalid){ UI.toast("يُسمح فقط بملفات PDF.", "error", "info"); return; }
-        renderUploadModal(files, selectedSubject);
-      });
-      input.click();
-    });
-
     root.addEventListener("click", e => {
+      const subjPill = e.target.closest("[data-ls-subj]");
+      if (subjPill){
+        selectedSubject = subjPill.dataset.lsSubj;
+        root.querySelectorAll(".ls-subject-pill").forEach(p => p.classList.remove("active"));
+        subjPill.classList.add("active");
+        refresh();
+        return;
+      }
       const openBtn = e.target.closest("[data-ls-open]");
-      if (openBtn){
-        const s = summariesCache.find(x => x.id === openBtn.dataset.lsOpen);
-        if (s) openPDFViewer(s);
-        return;
-      }
+      if (openBtn){ const s = summariesCache.find(x => x.id === openBtn.dataset.lsOpen); if (s) openPDFViewer(s); return; }
       const dlBtn = e.target.closest("[data-ls-dl]");
-      if (dlBtn){
-        const s = summariesCache.find(x => x.id === dlBtn.dataset.lsDl);
-        if (s) downloadFile(s);
-        return;
-      }
+      if (dlBtn){ const s = summariesCache.find(x => x.id === dlBtn.dataset.lsDl); if (s) downloadFile(s); return; }
       const menuBtn = e.target.closest("[data-ls-menu]");
       if (menuBtn){
         const dd = root.querySelector("#ls-dd-" + menuBtn.dataset.lsMenu);
@@ -421,61 +455,46 @@ App.Views = App.Views || {};
         return;
       }
       const favBtn = e.target.closest("[data-ls-fav-toggle]");
-      if (favBtn){
-        const s = summariesCache.find(x => x.id === favBtn.dataset.lsFavToggle);
-        if (s) toggleFav(s);
-        return;
-      }
+      if (favBtn){ const s = summariesCache.find(x => x.id === favBtn.dataset.lsFavToggle); if (s) toggleFav(s); return; }
       const editBtn = e.target.closest("[data-ls-edit]");
-      if (editBtn){
-        const s = summariesCache.find(x => x.id === editBtn.dataset.lsEdit);
-        if (s) renderEditModal(s);
-        return;
-      }
+      if (editBtn){ const s = summariesCache.find(x => x.id === editBtn.dataset.lsEdit); if (s) renderEditModal(s); return; }
       const replaceBtn = e.target.closest("[data-ls-replace]");
-      if (replaceBtn){
-        const s = summariesCache.find(x => x.id === replaceBtn.dataset.lsReplace);
-        if (s) renderReplaceModal(s);
-        return;
-      }
+      if (replaceBtn){ const s = summariesCache.find(x => x.id === replaceBtn.dataset.lsReplace); if (s) renderReplaceModal(s); return; }
       const deleteBtn = e.target.closest("[data-ls-delete]");
-      if (deleteBtn){
-        const s = summariesCache.find(x => x.id === deleteBtn.dataset.lsDelete);
-        if (s) confirmDelete(s);
-        return;
-      }
+      if (deleteBtn){ const s = summariesCache.find(x => x.id === deleteBtn.dataset.lsDelete); if (s) confirmDelete(s); return; }
       const filterBtn = e.target.closest("[data-ls-filter]");
-      if (filterBtn){
-        filterStatus = filterBtn.dataset.lsFilter;
-        refresh();
-        return;
-      }
+      if (filterBtn){ filterStatus = filterBtn.dataset.lsFilter; refresh(); return; }
       const favFilter = e.target.closest("[data-ls-fav]");
-      if (favFilter){
-        filterFav = !filterFav;
-        refresh();
-        return;
-      }
+      if (favFilter){ filterFav = !filterFav; refresh(); return; }
+      const addBtn = e.target.closest("#ls-add, #ls-empty-add");
+      if (addBtn){ triggerAdd(); return; }
     });
 
     root.addEventListener("input", e => {
-      if (e.target.id === "ls-search"){
-        searchQuery = e.target.value;
-        refreshList();
-      }
+      if (e.target.id === "ls-search"){ searchQuery = e.target.value; refreshList(); }
     });
     root.addEventListener("change", e => {
-      if (e.target.id === "ls-sort"){
-        sortBy = e.target.value;
-        refreshList();
-      }
+      if (e.target.id === "ls-sort"){ sortBy = e.target.value; refreshList(); }
     });
 
     document.addEventListener("click", e => {
-      if (!e.target.closest(".ls-menu-wrap")){
-        root.querySelectorAll(".ls-dropdown").forEach(d => d.hidden = true);
-      }
+      if (!e.target.closest(".ls-menu-wrap")) root.querySelectorAll(".ls-dropdown").forEach(d => d.hidden = true);
     });
+  }
+
+  function triggerAdd(){
+    if (!selectedSubject){ UI.toast("اختر مادة أولًا.", "error", "info"); return; }
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf,application/pdf";
+    input.multiple = true;
+    input.addEventListener("change", () => {
+      const files = Array.from(input.files || []);
+      if (!files.length) return;
+      if (files.find(f => f.type !== "application/pdf")){ UI.toast("يُسمح فقط بملفات PDF.", "error", "info"); return; }
+      renderUploadModal(files, selectedSubject);
+    });
+    input.click();
   }
 
   async function downloadFile(s){
@@ -487,24 +506,13 @@ App.Views = App.Views || {};
         headers: { "Authorization": "Bearer " + token, "apikey": App.SupabaseConfig.supabaseAnonKey }
       });
       const data = await res.json();
-      if (data.ok && data.url){
-        const a = document.createElement("a");
-        a.href = data.url;
-        a.download = s.file_name;
-        a.click();
-        return;
-      }
+      if (data.ok && data.url){ const a = document.createElement("a"); a.href = data.url; a.download = s.file_name; a.click(); return; }
     } catch(_e){}
     try {
       const c = await (App.Sync && App.Sync.client ? App.Sync.client() : null);
       if (c){
         const { data: urlData } = await c.storage.from(BUCKET).createSignedUrl(s.file_path, 3600);
-        if (urlData && urlData.signedUrl){
-          const a = document.createElement("a");
-          a.href = urlData.signedUrl;
-          a.download = s.file_name;
-          a.click();
-        }
+        if (urlData && urlData.signedUrl){ const a = document.createElement("a"); a.href = urlData.signedUrl; a.download = s.file_name; a.click(); }
       }
     } catch(_e){}
   }
@@ -526,12 +534,10 @@ App.Views = App.Views || {};
     const list = filtered();
     const listEl = $("ls-list");
     const dashEl = $("ls-dashboard");
-    const filtersEl = $("ls-filters");
+    const toolEl = $("ls-toolbar-wrap");
     if (dashEl) dashEl.innerHTML = dashboardHTML();
-    if (filtersEl) filtersEl.innerHTML = filterBarHTML();
-    if (listEl){
-      listEl.innerHTML = list.length ? list.map(summaryCard).join("") : emptyHTML();
-    }
+    if (toolEl) toolEl.innerHTML = toolbarHTML();
+    if (listEl) listEl.innerHTML = list.length ? list.map(summaryCard).join("") : emptyHTML();
   }
 
   async function refresh(){
