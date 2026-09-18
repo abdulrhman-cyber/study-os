@@ -5,7 +5,7 @@
   لا يوجد bundling: الموقع HTML/CSS/JS خام، والـ routing عبر hash (#/route).
   كل المسارات داخل الموقع نسبية، لذا يعمل تحت أي base مثل /study-os/.
 */
-import { cpSync, mkdirSync, rmSync, existsSync, readdirSync, statSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, existsSync, readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -35,6 +35,22 @@ if (missing.length) {
   console.error("ERROR: required site paths missing: " + missing.join(", "));
   process.exit(1);
 }
+
+/*
+  Cache-busting: نضيف ?v=<SW_BUILD> لكل أصل محلي في index.html.
+  GitHub Pages يخدّم الملفات بـ max-age=600، والـ Service Worker يخدّمها من الكاش أولًا،
+  لذا تغيير الرابط يضمن أن المتصفح يجلب النسخة الجديدة فور النشر (حتى مع SW قديم).
+*/
+const swSrc = readFileSync(join(rootDir, "sw.js"), "utf8");
+const vb = swSrc.match(/SW_BUILD\s*=\s*"([^"]+)"/);
+const version = vb ? vb[1] : String(Date.now());
+const idxPath = join(outDir, "index.html");
+const html = readFileSync(idxPath, "utf8").replace(
+  /(href|src)="((?:css|js|img)\/[^"?#]+\.(?:css|js|webp|png|ico|jpg|jpeg|svg))"/g,
+  (all, attr, url) => attr + '="' + url + "?v=" + version + '"'
+);
+writeFileSync(idxPath, html);
+console.log("OK: cache-busting applied with v=" + version);
 
 let count = 0;
 let bytes = 0;
