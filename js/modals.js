@@ -518,23 +518,24 @@ App.Modals = (function () {
         return;
       }
       var q = input.value || "";
-      var h = "", lastG = "";
+      var h = "", lastG = "", si = 0;
       flat.forEach(function(c, i){
         if (c.g !== lastG){
-          h += '<div class="pl-group" role="presentation">' + U.esc(c.g) + '</div>';
-          lastG = c.g;
+          h += '<div class="pl-group" role="presentation" style="--i:' + si + '">' + U.esc(c.g) + '</div>';
+          lastG = c.g; si++;
         }
         if (c.kind === "clear"){
-          h += '<button class="pl-item pl-clear" data-i="' + i + '"><span class="pl-ic">🗑</span><span class="pl-txt"><span class="pl-title">مسح سجل البحث</span></span></button>';
-          return;
+          h += '<button class="pl-item pl-clear" data-i="' + i + '" style="--i:' + si + '"><span class="pl-ic">🗑</span><span class="pl-txt"><span class="pl-title">مسح سجل البحث</span></span></button>';
+          si++; return;
         }
         var sel = i === cursor;
-        h += '<button class="pl-item' + (sel ? " sel" : "") + '" data-i="' + i + '" role="option" aria-selected="' + sel + '" id="pl-active-' + i + '">' +
+        h += '<button class="pl-item' + (sel ? " sel" : "") + '" data-i="' + i + '" role="option" aria-selected="' + sel + '" id="pl-active-' + i + '" style="--i:' + si + '">' +
           '<span class="pl-ic">' + (c.icon.length <= 2 ? c.icon : I.get(c.icon, 18)) + '</span>' +
           '<span class="pl-txt"><span class="pl-title">' + _hiMark(c.title, q) + '</span>' + (c.sub ? '<span class="pl-sub">' + _hiMark(c.sub, q) + '</span>' : '') + '</span>' +
           (c.kindLabel ? '<span class="pl-kind">' + U.esc(c.kindLabel) + '</span>' : '') +
           (sel ? '<span class="pl-kbd">↵</span>' : '') +
         '</button>';
+        si++;
         if (sel && (c.detail || (c.actions && c.actions.length))){
           h += '<div class="pl-preview" role="note">';
           if (c.detail) h += '<div class="pl-detail">' + U.esc(c.detail) + '</div>';
