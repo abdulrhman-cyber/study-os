@@ -319,16 +319,17 @@ App.Modals = (function () {
 
   /* ══════════════ COMMAND PALETTE ══════════════ */
   function openPalette(){
-    if (UI.closePalette) return; // already open
+    if (UI.closePalette) return;
     const st = S.getState();
     const m = UI.openModal(
       '<div id="palette" class="palette open" role="dialog" aria-modal="true" aria-label="بحث سريع">' +
         '<div class="palette-box">' +
           '<div class="palette-input">' +
-            '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>' +
-            '<input id="palette-input" class="palette-search" placeholder="ابحث عن صفحة، مهمة، واجب، ملاحظة، خطأ…" autocomplete="off"></div>' +
+            '<span class="pl-search-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>' +
+            '<input id="palette-input" class="palette-search" placeholder="ابحث عن صفحة، مهمة، واجب، ملاحظة…" autocomplete="off">' +
+            '<kbd>Ctrl K</kbd></div>' +
           '<div class="palette-list" id="palette-list"></div>' +
-          '<div class="palette-hint">↑↓ للتحريك · Enter للفتح · Esc للإغلاق</div>' +
+          '<div class="palette-hint"><span><kbd>↑</kbd><kbd>↓</kbd> للتحريك</span><span><kbd>Enter</kbd> للفتح</span><span><kbd>Esc</kbd> للإغلاق</span></div>' +
         '</div>' +
       '</div>', {});
     UI.closePalette = () => { UI.closeModal(); UI.closePalette = null; };
@@ -355,28 +356,28 @@ App.Modals = (function () {
       const add = (label, arr) => { if (arr.length) groups.push({ label: label, items: arr }); };
       const pg = [];
       D.navPages.concat(D.extraPages).forEach(p => {
-        if (!filter || (p.name + " " + p.en).toLowerCase().indexOf(filter) >= 0) pg.push({ ic: p.icon, title: p.name, sub: "صفحة", route: p.route });
+        if (!filter || (p.name + " " + p.en).toLowerCase().indexOf(filter) >= 0) pg.push({ ic: p.icon, title: p.name, sub: "صفحة", route: p.route, kindLabel: "صفحة" });
       });
       add("الصفحات", pg);
       const ac = [];
       ["task","homework","note","mistake","session"].forEach(a => {
-        if (!filter || a.indexOf(filter) >= 0) ac.push({ ic: "plus", title: a === "task" ? "إضافة مهمة" : a === "homework" ? "إضافة واجب" : a === "note" ? "إضافة ملاحظة" : a === "mistake" ? "تسجيل خطأ" : "بدء جلسة", sub: "إجراء سريع", act: a });
+        if (!filter || a.indexOf(filter) >= 0) ac.push({ ic: "plus", title: a === "task" ? "إضافة مهمة" : a === "homework" ? "إضافة واجب" : a === "note" ? "إضافة ملاحظة" : a === "mistake" ? "تسجيل خطأ" : "بدء جلسة", sub: "إجراء سريع", act: a, kindLabel: "سريع" });
       });
       add("إجراءات سريعة", ac);
       const tk = [];
-      st.tasks.slice(0, 50).forEach(t => { if (!filter || (t.title + " " + (t.desc || "") + " " + (t.lesson || "") + " " + D.subjName(t.subject)).toLowerCase().indexOf(filter) >= 0) tk.push({ ic: "tasks", kind: "task", id: t.id, title: t.title, sub: "مهمة · " + D.subjName(t.subject), route: "todo" }); });
+      st.tasks.slice(0, 50).forEach(t => { if (!filter || (t.title + " " + (t.desc || "") + " " + (t.lesson || "") + " " + D.subjName(t.subject)).toLowerCase().indexOf(filter) >= 0) tk.push({ ic: "tasks", kind: "task", id: t.id, title: t.title, sub: "مهمة · " + D.subjName(t.subject), route: "todo", kindLabel: "مهمة" }); });
       add("المهام", tk);
       const hw = [];
-      st.homework.slice(0, 50).forEach(h => { if (!filter || (h.title + " " + (h.lesson || "") + " " + (h.desc || "") + " " + D.subjName(h.subject) + " " + (h.priority || "")).toLowerCase().indexOf(filter) >= 0) hw.push({ ic: "homework", kind: "homework", id: h.id, title: h.title, sub: "واجب · " + D.subjName(h.subject), route: "homework" }); });
+      st.homework.slice(0, 50).forEach(h => { if (!filter || (h.title + " " + (h.lesson || "") + " " + (h.desc || "") + " " + D.subjName(h.subject) + " " + (h.priority || "")).toLowerCase().indexOf(filter) >= 0) hw.push({ ic: "homework", kind: "homework", id: h.id, title: h.title, sub: "واجب · " + D.subjName(h.subject), route: "homework", kindLabel: "واجب" }); });
       add("الواجبات", hw);
       const nt = [];
-      st.notes.slice(0, 50).forEach(n => { if (!filter || (n.title + " " + n.content + " " + n.tags.join(" ")).toLowerCase().indexOf(filter) >= 0) nt.push({ ic: "notes", kind: "note", id: n.id, title: n.title.length > 60 ? n.title.slice(0, 60) + "…" : n.title, sub: "ملاحظة · " + D.subjName(n.subject), route: "notes" }); });
+      st.notes.slice(0, 50).forEach(n => { if (!filter || (n.title + " " + n.content + " " + n.tags.join(" ")).toLowerCase().indexOf(filter) >= 0) nt.push({ ic: "notes", kind: "note", id: n.id, title: n.title.length > 60 ? n.title.slice(0, 60) + "…" : n.title, sub: "ملاحظة · " + D.subjName(n.subject), route: "notes", kindLabel: "ملاحظة" }); });
       add("الملاحظات", nt);
       const mi = [];
-      st.mistakes.slice(0, 50).forEach(x => { if (!filter || (x.question + " " + (x.notes || "") + " " + D.subjName(x.subject)).toLowerCase().indexOf(filter) >= 0) mi.push({ ic: "errors", kind: "mistake", id: x.id, title: x.question.length > 60 ? x.question.slice(0, 60) + "…" : x.question, sub: "خطأ · " + D.subjName(x.subject), route: "errors" }); });
+      st.mistakes.slice(0, 50).forEach(x => { if (!filter || (x.question + " " + (x.notes || "") + " " + D.subjName(x.subject)).toLowerCase().indexOf(filter) >= 0) mi.push({ ic: "errors", kind: "mistake", id: x.id, title: x.question.length > 60 ? x.question.slice(0, 60) + "…" : x.question, sub: "خطأ · " + D.subjName(x.subject), route: "errors", kindLabel: "خطأ" }); });
       add("الأخطاء", mi);
       const ss = [];
-      st.blocks.slice(0, 50).forEach(b => { if (!filter || (b.title + " " + D.subjName(b.subject)).toLowerCase().indexOf(filter) >= 0) ss.push({ ic: "clock", title: b.title || D.subjName(b.subject), sub: "جلسة · " + U.fmtDate(b.date, { short: true }) + " · " + U.fmtDur(b.minutes), route: "timer" }); });
+      st.blocks.slice(0, 50).forEach(b => { if (!filter || (b.title + " " + D.subjName(b.subject)).toLowerCase().indexOf(filter) >= 0) ss.push({ ic: "clock", title: b.title || D.subjName(b.subject), sub: "جلسة · " + U.fmtDate(b.date, { short: true }) + " · " + U.fmtDur(b.minutes), route: "timer", kindLabel: "جلسة" }); });
       add("الجلسات", ss);
       const flat = [];
       groups.forEach(g => flat.push.apply(flat, g.items));
@@ -385,7 +386,7 @@ App.Modals = (function () {
     function render(filter){
       cursor = -1;
       const got = items(filter);
-      if (!got.flat.length){ list.innerHTML = '<div class="pl-empty">لا توجد نتائج مطابقة.</div>'; return; }
+      if (!got.flat.length){ list.innerHTML = '<div class="pl-empty"><span class="e">🔍</span>لا توجد نتائج مطابقة.</div>'; return; }
       let html = "", i = 0;
       got.groups.forEach(g => {
         html += '<div class="pl-group">' + U.esc(g.label) + '</div>';
@@ -394,6 +395,7 @@ App.Modals = (function () {
             '<span class="pl-badge"></span>' +
             '<span class="pl-ic">' + I.get(r.ic, 16) + '</span>' +
             '<span class="pl-txt"><div class="pl-title">' + U.esc(r.title) + '</div><div class="pl-sub">' + U.esc(r.sub) + '</div></span>' +
+            (r.kindLabel ? '<span class="pl-kind">' + U.esc(r.kindLabel) + '</span>' : '') +
           '</button>';
           i++;
         });
