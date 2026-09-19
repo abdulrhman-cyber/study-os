@@ -1,0 +1,31 @@
+{
+  "appId": "com.studyos.app",
+  "appName": "Study OS",
+  "webDir": "_site",
+  "server": {
+    "androidScheme": "studyos"
+  },
+  "android": {
+    "buildOptions": {
+      "keystorePath": null,
+      "keystoreAlias": null
+    }
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 0,
+      "backgroundColor": "#090A0C",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#090A0C"
+    },
+    "App": {
+      "appId": "com.studyos.app",
+      "appName": "Study OS",
+      "webDir": "_site"
+    }
+  }
+}
