@@ -159,9 +159,9 @@ window.App = window.App || {};
   App.Router = Router;
 
   function parseHash(){
-    const h = (location.hash || "#/ai-assistant").replace(/^#\/?/, "");
+    const h = (location.hash || "#/dashboard").replace(/^#\/?/, "");
     const parts = h.split("/");
-    return { route: parts[0] || "ai-assistant", date: parts[1] };
+    return { route: parts[0] || "dashboard", date: parts[1] };
   }
   function renderView(r, ctx){
     App.Views.run(r, ctx || {});
@@ -334,8 +334,23 @@ window.App = window.App || {};
     animate();
   }
   function animate(){
-    var app = $("app");
-    if (app) app.style.opacity = "1";
+    const fill = $("boot-fill"), pct = $("boot-pct");
+    const start = Date.now(), T = 600;
+    function step(){
+      const k = Math.min(1, (Date.now() - start) / T);
+      const eased = 1 - Math.pow(1 - k, 3);
+      const p = Math.round(100 * eased);
+      fill.style.width = p + "%";
+      pct.textContent = p + "%";
+      if (k < 1){ requestAnimationFrame(step); return; }
+      const b = $("boot");
+      b.classList.add("out");
+      const app = $("app");
+      app.style.opacity = "1";
+      b.setAttribute("aria-hidden", "true");
+      setTimeout(() => { b.style.display = "none"; }, 450);
+    }
+    requestAnimationFrame(step);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
