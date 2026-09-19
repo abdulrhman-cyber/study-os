@@ -406,11 +406,11 @@ App.Modals = (function () {
         if (score > 0 && out.length < 70) out.push({g:g,icon:icon,title:title,sub:sub,detail:detail||"",kind:kind,kindLabel:kindLabel,fn:fn,actions:actions||[],score:score});
       }
       var quick = [
-        {ic:"plus",title:"إضافة مهمة",sub:"إجراء سريع",fn:function(){UI.closePalette();App.Modals.openTaskModal()}},
-        {ic:"plus",title:"إضافة واجب",sub:"إجراء سريع",fn:function(){UI.closePalette();App.Modals.openHwModal()}},
-        {ic:"plus",title:"إضافة ملاحظة",sub:"إجراء سريع",fn:function(){UI.closePalette();App.Modals.openNoteModal()}},
-        {ic:"plus",title:"تسجيل خطأ",sub:"إجراء سريع",fn:function(){UI.closePalette();App.Modals.openMistakeModal()}},
-        {ic:"plus",title:"بدء جلسة",sub:"إجراء سريع",fn:function(){UI.closePalette();UI.startSessionFlow()}}
+        {ic:"plus",title:"إضافة مهمة",sub:"إجراء سريع",fn:function(){App.Modals.openTaskModal()}},
+        {ic:"plus",title:"إضافة واجب",sub:"إجراء سريع",fn:function(){App.Modals.openHwModal()}},
+        {ic:"plus",title:"إضافة ملاحظة",sub:"إجراء سريع",fn:function(){App.Modals.openNoteModal()}},
+        {ic:"plus",title:"تسجيل خطأ",sub:"إجراء سريع",fn:function(){App.Modals.openMistakeModal()}},
+        {ic:"plus",title:"بدء جلسة",sub:"إجراء سريع",fn:function(){UI.startSessionFlow()}}
       ];
       quick.forEach(function(a){
         var sc = 0;
@@ -429,7 +429,7 @@ App.Modals = (function () {
           else if (_fuzzyHit(hl, nq)) sc = 35;
         }
         if (sc > 0) R("📄 الصفحات", p.icon, p.name, p.en, "", "page", "صفحة",
-          function(){UI.closePalette();App.Router.go(p.route)}, [], sc);
+          function(){App.Router.go(p.route)}, [], sc);
       });
 
       (st.subjects || []).slice(0, 20).forEach(function(s){
@@ -437,37 +437,37 @@ App.Modals = (function () {
         var sc = nq ? _rankHit([{v:s.name,w:1}], nq) : 60;
         if (nq && _xMatch(nq, s.name)) sc = Math.max(sc, 55);
         R("📚 المواد", "📘", s.name, (s.progress || 0) + "% · " + open + " مهام مفتوحة", "", "subject", "مادة",
-          function(){UI.closePalette();App.Router.go("subjects")}, [{label:"بدء جلسة",fn:function(){UI.closePalette();UI.startSessionFlow()}}], nq ? sc : 55);
+          function(){App.Router.go("subjects")}, [{label:"بدء جلسة",fn:function(){UI.startSessionFlow()}}], nq ? sc : 55);
       });
 
       (st.tasks || []).slice(0, 80).forEach(function(t){
         var sc = nq ? _rankHit([{v:t.title,w:1},{v:D.subjName(t.subject),w:.75},{v:(t.tags||[]).join(" "),w:.7}], nq) : 0;
         if (sc > 0) R("✓ المهام", "☑", t.title, D.subjName(t.subject), t.done ? "مهمة مكتملة" : "مهمة مفتوحة", "task", "مهمة",
-          function(){UI.closePalette();App.Modals.openTaskModal(t.id)}, [{label:t.done?"إعادة فتح":"إنجاز",fn:function(){UI.closePalette();App.Modals.openTaskModal(t.id)}}], sc);
+          function(){App.Modals.openTaskModal(t.id)}, [{label:t.done?"إعادة فتح":"إنجاز",fn:function(){App.Modals.openTaskModal(t.id)}}], sc);
       });
 
       (st.homework || []).slice(0, 40).forEach(function(h){
         var sc = nq ? _rankHit([{v:h.title,w:1},{v:h.desc||"",w:.5},{v:D.subjName(h.subject),w:.7}], nq) : 0;
         if (sc > 0) R("📖 الواجبات", "📝", h.title, D.subjName(h.subject) + (h.done ? " · منجز" : ""), h.desc || "", "homework", "واجب",
-          function(){UI.closePalette();App.Modals.openHwModal(h.id)}, [{label:h.done?"إعادة فتح":"إنجاز",fn:function(){UI.closePalette();App.Modals.openHwModal(h.id)}}], sc);
+          function(){App.Modals.openHwModal(h.id)}, [{label:h.done?"إعادة فتح":"إنجاز",fn:function(){App.Modals.openHwModal(h.id)}}], sc);
       });
 
       (st.notes || []).slice(0, 80).forEach(function(n){
         var sc = nq ? _rankHit([{v:n.title,w:1},{v:n.content||"",w:.5},{v:(n.tags||[]).join(" "),w:.7},{v:D.subjName(n.subject),w:.6}], nq) : 0;
         if (sc > 0) R("📝 الملاحظات", "✎", n.title, D.subjName(n.subject) + ((n.tags||[]).length ? " · #" + n.tags.slice(0,2).join(" #") : ""), (n.content||"").slice(0,80), "note", "ملاحظة",
-          function(){UI.closePalette();App.Modals.openNoteModal(n.id)}, [{label:"تعديل",fn:function(){UI.closePalette();App.Modals.openNoteModal(n.id)}}], sc);
+          function(){App.Modals.openNoteModal(n.id)}, [{label:"تعديل",fn:function(){App.Modals.openNoteModal(n.id)}}], sc);
       });
 
       (st.mistakes || []).slice(0, 50).forEach(function(x){
         var sc = nq ? _rankHit([{v:x.question,w:1},{v:x.notes||"",w:.5},{v:D.subjName(x.subject),w:.6}], nq) : 0;
         if (sc > 0) R("❌ الأخطاء", "❌", x.question, D.subjName(x.subject), x.notes || "", "mistake", "خطأ",
-          function(){UI.closePalette();App.Modals.openMistakeModal(x.id)}, [], sc);
+          function(){App.Modals.openMistakeModal(x.id)}, [], sc);
       });
 
       (st.blocks || []).slice(0, 50).forEach(function(b){
         var sc = nq ? _rankHit([{v:D.subjName(b.subject),w:1},{v:b.title||"",w:.6}], nq) : 0;
         if (sc > 0) R("⏱ الجلسات", "📚", (b.title || D.subjName(b.subject)), U.fmtDate(b.date, {short:true}) + " · " + U.fmtDur(b.minutes), "", "session", "جلسة",
-          function(){UI.closePalette();App.Router.go("timer")}, [], sc);
+          function(){App.Router.go("timer")}, [], sc);
       });
 
       out.sort(function(a,b){
@@ -495,13 +495,13 @@ App.Modals = (function () {
         }
         flat.push({g:"✨ اقتراحات",icon:"💡",title:"ماذا تبحث عنه؟",sub:"آخر المهام والملاحظات والمواد",kind:"hint",kindLabel:"",fn:function(){},actions:[],score:5});
         (st.tasks||[]).slice(-2).reverse().forEach(function(t){
-          flat.push({g:"✨ اقتراحات",icon:"☑",title:t.title,sub:D.subjName(t.subject),kind:"task",kindLabel:"مهمة",fn:function(){UI.closePalette();App.Modals.openTaskModal(t.id)},actions:[],score:40});
+          flat.push({g:"✨ اقتراحات",icon:"☑",title:t.title,sub:D.subjName(t.subject),kind:"task",kindLabel:"مهمة",fn:function(){App.Modals.openTaskModal(t.id)},actions:[],score:40});
         });
         (st.notes||[]).slice(-2).reverse().forEach(function(n){
-          flat.push({g:"✨ اقتراحات",icon:"✎",title:n.title,sub:D.subjName(n.subject),kind:"note",kindLabel:"ملاحظة",fn:function(){UI.closePalette();App.Modals.openNoteModal(n.id)},actions:[],score:40});
+          flat.push({g:"✨ اقتراحات",icon:"✎",title:n.title,sub:D.subjName(n.subject),kind:"note",kindLabel:"ملاحظة",fn:function(){App.Modals.openNoteModal(n.id)},actions:[],score:40});
         });
         (st.subjects||[]).slice(0,4).forEach(function(s){
-          flat.push({g:"✨ اقتراحات",icon:"📘",title:s.name,sub:(s.progress||0)+"%",kind:"subject",kindLabel:"مادة",fn:function(){UI.closePalette();App.Router.go("subjects")},actions:[],score:40});
+          flat.push({g:"✨ اقتراحات",icon:"📘",title:s.name,sub:(s.progress||0)+"%",kind:"subject",kindLabel:"مادة",fn:function(){App.Router.go("subjects")},actions:[],score:40});
         });
       } else {
         collectResults(nq).forEach(function(r){ flat.push(r); });
@@ -558,7 +558,11 @@ App.Modals = (function () {
           if (act){
             var ai = +act.dataset.a;
             var item = flat[ci];
-            if (item && item.actions && item.actions[ai]) try{ item.actions[ai].fn(); }catch(e){}
+            if (item && item.actions && item.actions[ai]){
+              _pushRecent(input.value || "");
+              UI.closePalette();
+              try{ item.actions[ai].fn(); }catch(e){}
+            }
             return;
           }
           var item = flat[ci];
