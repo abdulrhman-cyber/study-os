@@ -319,137 +319,279 @@ App.Modals = (function () {
 
   /* ══════════════ COMMAND PALETTE ══════════════ */
   let palLastFocused = null;
+
+  /* ── Search helpers ── */
+  function _normAr(s){ return String(s||"").toLowerCase().replace(/[ً-ٰٟ]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ة/g,"ه").replace(/ى/g,"ي").replace(/\s+/g," ").trim(); }
+  function _fuzzyHit(hay, ndl){
+    hay = String(hay).replace(/\s/g,""); ndl = String(ndl).replace(/\s/g,"");
+    if (ndl.length < 3 || !ndl) return false;
+    var j = 0;
+    for (var ci = 0; ci < ndl.length; ci++){ j = hay.indexOf(ndl[ci], j); if (j < 0) return false; j++; }
+    return true;
+  }
+  function _rankHit(fields, nq){
+    nq = _normAr(nq); var best = 0;
+    for (var fi = 0; fi < fields.length; fi++){
+      var h = _normAr(fields[fi].v); var w = fields[fi].w || 1;
+      if (!h || !nq) continue;
+      var s = 0;
+      if (h === nq) s = 100;
+      else if (h.startsWith(nq)) s = 80 * w;
+      else if (h.indexOf(nq) >= 0) s = 60 * w;
+      else if (nq.length >= 3 && _fuzzyHit(h, nq)) s = 30 * w;
+      if (s > best) best = s;
+    }
+    return best;
+  }
+  var _xScript = [["english","إنجليز"],["arabic","عربي"],["history","تاريخ"],["programming","برمج"],["math","رياضيات"],["physics","فيزياء"],["chemistry","كيمياء"],["code","برمج"],["bio","أحياء"]];
+  function _xMatch(q, name){
+    var n = _normAr(name);
+    for (var xi = 0; xi < _xScript.length; xi++){
+      var a = _normAr(_xScript[xi][0]), b = _normAr(_xScript[xi][1]);
+      if ((q.indexOf(a) >= 0 && n.indexOf(b) >= 0) || (q.indexOf(b) >= 0 && n.indexOf(a) >= 0)) return true;
+    }
+    return false;
+  }
+  function _hiMark(text, q){
+    var t = U.esc(text); var qq = String(q||"").trim();
+    if (!qq) return t;
+    var cands = [U.esc(qq)].concat(qq.split(/\s+/).filter(function(w){return w.length > 1}).map(function(w){return U.esc(w)}));
+    var low = t.toLowerCase();
+    for (var hi = 0; hi < cands.length; hi++){
+      var e = cands[hi]; if (!e) continue;
+      var idx = low.indexOf(e.toLowerCase());
+      if (idx >= 0) return t.slice(0, idx) + '<mark class="pl-hl">' + t.slice(idx, idx + e.length) + '</mark>' + t.slice(idx + e.length);
+    }
+    return t;
+  }
+  function _recentSearches(){ try { var r = JSON.parse(localStorage.getItem("studyos.recent") || "[]"); return Array.isArray(r) ? r : []; } catch(e){ return []; } }
+  function _pushRecent(q){
+    q = String(q||"").trim(); if (q.length < 2) return;
+    try { var r = _recentSearches().filter(function(x){return x !== q}); r.unshift(q); localStorage.setItem("studyos.recent", JSON.stringify(r.slice(0, 6))); } catch(e){}
+  }
+  function _clearRecent(){ try { localStorage.removeItem("studyos.recent"); } catch(e){} }
+
   function openPalette(){
     if (UI.closePalette) return;
     palLastFocused = document.activeElement;
-    const st = S.getState();
-    const m = UI.openModal(
+    var st = S.getState();
+    var m = UI.openModal(
       '<div id="palette" class="palette open" role="dialog" aria-modal="true" aria-label="بحث سريع" aria-combobox="list" aria-expanded="true">' +
-        '<div class="palette-box">' +
+        '<div class="palette-box glass-3">' +
           '<div class="palette-header">' +
-            '<span class="pl-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>' +
-            '<input id="palette-input" class="palette-input" placeholder="ابحث عن صفحة، مهمة، واجب…" autocomplete="off" aria-label="بحث" role="combobox" aria-controls="palette-list" aria-activedescendant="">' +
-            '<span class="pl-shortcut"><kbd>Ctrl K</kbd></span>' +
+            '<span class="pl-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>' +
+            '<input id="palette-input" class="palette-input" placeholder="اكتب أمرًا أو ابحث..." autocomplete="off" aria-label="بحث" role="combobox" aria-controls="palette-list" aria-activedescendant="">' +
+            '<span class="pl-shortcut"><kbd>ESC</kbd></span>' +
           '</div>' +
           '<div class="palette-body" id="palette-list" role="listbox" aria-label="نتائج البحث"></div>' +
           '<div class="palette-footer">' +
             '<div class="footer-left">' +
-              '<span class="pl-hint"><kbd>↑</kbd><kbd>↓</kbd> للتحريك</span>' +
-              '<span class="pl-hint"><kbd>↵</kbd> للتنفيذ</span>' +
-              '<span class="pl-hint"><kbd>Esc</kbd> للإغلاق</span>' +
+              '<span class="pl-hint"><kbd>↑↓</kbd> للتنقل</span>' +
+              '<span class="pl-hint"><kbd>↵</kbd> تنفيذ</span>' +
+              '<span class="pl-hint"><kbd>Esc</kbd> إغلاق</span>' +
             '</div>' +
           '</div>' +
         '</div>' +
       '</div>', {});
-    UI.closePalette = () => { UI.closeModal(); UI.closePalette = null; if (palLastFocused && palLastFocused.focus) try{palLastFocused.focus();}catch(e){} };
-    const input = document.getElementById("palette-input");
-    const list = document.getElementById("palette-list");
+    UI.closePalette = function(){ UI.closeModal(); UI.closePalette = null; if (palLastFocused && palLastFocused.focus) try{palLastFocused.focus();}catch(e){} };
+    var input = document.getElementById("palette-input");
+    var list = document.getElementById("palette-list");
+    var cursor = -1;
+    var flat = [];
+
+    function collectResults(nq){
+      var out = [];
+      var order = ["⚡ أوامر سريعة","📚 المواد","✓ المهام","📖 الواجبات","📝 الملاحظات","❌ الأخطاء","⏱ الجلسات"];
+      function R(g,icon,title,sub,detail,kind,kindLabel,fn,actions,score){
+        if (score > 0 && out.length < 70) out.push({g:g,icon:icon,title:title,sub:sub,detail:detail||"",kind:kind,kindLabel:kindLabel,fn:fn,actions:actions||[],score:score});
+      }
+      var quick = [
+        {ic:"plus",title:"إضافة مهمة",sub:"إجراء سريع",fn:function(){UI.closePalette();App.Modals.openTaskModal()}},
+        {ic:"plus",title:"إضافة واجب",sub:"إجراء سريع",fn:function(){UI.closePalette();App.Modals.openHwModal()}},
+        {ic:"plus",title:"إضافة ملاحظة",sub:"إجراء سريع",fn:function(){UI.closePalette();App.Modals.openNoteModal()}},
+        {ic:"plus",title:"تسجيل خطأ",sub:"إجراء سريع",fn:function(){UI.closePalette();App.Modals.openMistakeModal()}},
+        {ic:"plus",title:"بدء جلسة",sub:"إجراء سريع",fn:function(){UI.closePalette();UI.startSessionFlow()}}
+      ];
+      quick.forEach(function(a){
+        var sc = 0;
+        if (!nq) sc = 55;
+        else { var hl = _normAr(a.title); if (hl.indexOf(nq) >= 0) sc = 70; else if (_fuzzyHit(hl, nq)) sc = 35; }
+        if (sc > 0) R("⚡ أوامر سريعة", a.ic, a.title, a.sub, "", "action", "إجراء", a.fn, [], sc);
+      });
+
+      (st.subjects || []).slice(0, 20).forEach(function(s){
+        var open = st.tasks.filter(function(t){return t.subject === s.id && !t.done}).length;
+        var sc = nq ? _rankHit([{v:s.name,w:1}], nq) : 60;
+        if (nq && _xMatch(nq, s.name)) sc = Math.max(sc, 55);
+        R("📚 المواد", "📘", s.name, (s.progress || 0) + "% · " + open + " مهام مفتوحة", "", "subject", "مادة",
+          function(){UI.closePalette();App.Router.go("subjects")}, [{label:"بدء جلسة",fn:function(){UI.closePalette();UI.startSessionFlow()}}], nq ? sc : 55);
+      });
+
+      (st.tasks || []).slice(0, 80).forEach(function(t){
+        var sc = nq ? _rankHit([{v:t.title,w:1},{v:D.subjName(t.subject),w:.75},{v:(t.tags||[]).join(" "),w:.7}], nq) : 0;
+        if (sc > 0) R("✓ المهام", "☑", t.title, D.subjName(t.subject), t.done ? "مهمة مكتملة" : "مهمة مفتوحة", "task", "مهمة",
+          function(){UI.closePalette();App.Modals.openTaskModal(t.id)}, [{label:t.done?"إعادة فتح":"إنجاز",fn:function(){UI.closePalette();App.Modals.openTaskModal(t.id)}}], sc);
+      });
+
+      (st.homework || []).slice(0, 40).forEach(function(h){
+        var sc = nq ? _rankHit([{v:h.title,w:1},{v:h.desc||"",w:.5},{v:D.subjName(h.subject),w:.7}], nq) : 0;
+        if (sc > 0) R("📖 الواجبات", "📝", h.title, D.subjName(h.subject) + (h.done ? " · منجز" : ""), h.desc || "", "homework", "واجب",
+          function(){UI.closePalette();App.Modals.openHwModal(h.id)}, [{label:h.done?"إعادة فتح":"إنجاز",fn:function(){UI.closePalette();App.Modals.openHwModal(h.id)}}], sc);
+      });
+
+      (st.notes || []).slice(0, 80).forEach(function(n){
+        var sc = nq ? _rankHit([{v:n.title,w:1},{v:n.content||"",w:.5},{v:(n.tags||[]).join(" "),w:.7},{v:D.subjName(n.subject),w:.6}], nq) : 0;
+        if (sc > 0) R("📝 الملاحظات", "✎", n.title, D.subjName(n.subject) + ((n.tags||[]).length ? " · #" + n.tags.slice(0,2).join(" #") : ""), (n.content||"").slice(0,80), "note", "ملاحظة",
+          function(){UI.closePalette();App.Modals.openNoteModal(n.id)}, [{label:"تعديل",fn:function(){UI.closePalette();App.Modals.openNoteModal(n.id)}}], sc);
+      });
+
+      (st.mistakes || []).slice(0, 50).forEach(function(x){
+        var sc = nq ? _rankHit([{v:x.question,w:1},{v:x.notes||"",w:.5},{v:D.subjName(x.subject),w:.6}], nq) : 0;
+        if (sc > 0) R("❌ الأخطاء", "❌", x.question, D.subjName(x.subject), x.notes || "", "mistake", "خطأ",
+          function(){UI.closePalette();App.Modals.openMistakeModal(x.id)}, [], sc);
+      });
+
+      (st.blocks || []).slice(0, 50).forEach(function(b){
+        var sc = nq ? _rankHit([{v:D.subjName(b.subject),w:1},{v:b.title||"",w:.6}], nq) : 0;
+        if (sc > 0) R("⏱ الجلسات", "📚", (b.title || D.subjName(b.subject)), U.fmtDate(b.date, {short:true}) + " · " + U.fmtDur(b.minutes), "", "session", "جلسة",
+          function(){UI.closePalette();App.Router.go("timer")}, [], sc);
+      });
+
+      out.sort(function(a,b){
+        var ai = order.indexOf(a.g), bi = order.indexOf(b.g);
+        ai = ai < 0 ? 99 : ai; bi = bi < 0 ? 99 : bi;
+        return (ai - bi) || (b.score - a.score);
+      });
+      return out.slice(0, 60);
+    }
+
+    function paint(q){
+      cursor = -1;
+      flat = [];
+      input.setAttribute("aria-activedescendant", "");
+      var nq = _normAr(q);
+
+      if (!nq){
+        collectResults("").forEach(function(r){ if (r.kind === "action") flat.push(r); });
+        var rs = _recentSearches();
+        if (rs.length){
+          flat.push({g:"🕘 عمليات البحث الأخيرة",icon:"🗑",title:"مسح سجل البحث",sub:"",kind:"clear",kindLabel:"",fn:function(){_clearRecent();paint(q)},actions:[],score:1});
+          rs.forEach(function(r){
+            flat.push({g:"🕘 عمليات البحث الأخيرة",icon:"🕘",title:r,sub:"بحث مجددًا",kind:"recent",kindLabel:"بحث",fn:function(){input.value=r;paint(r)},actions:[],score:50});
+          });
+        }
+        flat.push({g:"✨ اقتراحات",icon:"💡",title:"ماذا تبحث عنه؟",sub:"آخر المهام والملاحظات والمواد",kind:"hint",kindLabel:"",fn:function(){},actions:[],score:5});
+        (st.tasks||[]).slice(-2).reverse().forEach(function(t){
+          flat.push({g:"✨ اقتراحات",icon:"☑",title:t.title,sub:D.subjName(t.subject),kind:"task",kindLabel:"مهمة",fn:function(){UI.closePalette();App.Modals.openTaskModal(t.id)},actions:[],score:40});
+        });
+        (st.notes||[]).slice(-2).reverse().forEach(function(n){
+          flat.push({g:"✨ اقتراحات",icon:"✎",title:n.title,sub:D.subjName(n.subject),kind:"note",kindLabel:"ملاحظة",fn:function(){UI.closePalette();App.Modals.openNoteModal(n.id)},actions:[],score:40});
+        });
+        (st.subjects||[]).slice(0,4).forEach(function(s){
+          flat.push({g:"✨ اقتراحات",icon:"📘",title:s.name,sub:(s.progress||0)+"%",kind:"subject",kindLabel:"مادة",fn:function(){UI.closePalette();App.Router.go("subjects")},actions:[],score:40});
+        });
+      } else {
+        collectResults(nq).forEach(function(r){ flat.push(r); });
+      }
+
+      draw();
+    }
+
+    function draw(){
+      var box = list;
+      if (!box) return;
+      if (!flat.length){
+        box.innerHTML = '<div class="pl-empty" role="option" aria-selected="false"><div class="pl-empty-ic">🔍</div><b>لم نجد ما تبحث عنه</b><p>جرّب كلمة أخرى أو ابحث في جميع أقسام Study OS.</p></div>';
+        return;
+      }
+      var q = input.value || "";
+      var h = "", lastG = "";
+      flat.forEach(function(c, i){
+        if (c.g !== lastG){
+          h += '<div class="pl-group" role="presentation">' + U.esc(c.g) + '</div>';
+          lastG = c.g;
+        }
+        if (c.kind === "clear"){
+          h += '<button class="pl-item pl-clear" data-i="' + i + '"><span class="pl-ic">🗑</span><span class="pl-txt"><span class="pl-title">مسح سجل البحث</span></span></button>';
+          return;
+        }
+        var sel = i === cursor;
+        h += '<button class="pl-item' + (sel ? " sel" : "") + '" data-i="' + i + '" role="option" aria-selected="' + sel + '" id="pl-active-' + i + '">' +
+          '<span class="pl-ic">' + (c.icon.length <= 2 ? c.icon : I.get(c.icon, 18)) + '</span>' +
+          '<span class="pl-txt"><span class="pl-title">' + _hiMark(c.title, q) + '</span>' + (c.sub ? '<span class="pl-sub">' + _hiMark(c.sub, q) + '</span>' : '') + '</span>' +
+          (c.kindLabel ? '<span class="pl-kind">' + U.esc(c.kindLabel) + '</span>' : '') +
+          (sel ? '<span class="pl-kbd">↵</span>' : '') +
+        '</button>';
+        if (sel && (c.detail || (c.actions && c.actions.length))){
+          h += '<div class="pl-preview" role="note">';
+          if (c.detail) h += '<div class="pl-detail">' + U.esc(c.detail) + '</div>';
+          (c.actions || []).forEach(function(a, ai){
+            h += '<button class="pl-act" data-i="' + i + '" data-a="' + ai + '">' + U.esc(a.label) + '</button>';
+          });
+          h += '</div>';
+        }
+      });
+      box.innerHTML = h;
+      var selEl = box.querySelector(".pl-item.sel");
+      if (selEl) try{ selEl.scrollIntoView({block:"nearest"}); }catch(e){}
+      box.querySelectorAll(".pl-item").forEach(function(b){
+        b.addEventListener("mouseenter", function(){
+          var idx = +b.dataset.i;
+          if (idx !== cursor){ cursor = idx; draw(); }
+        });
+        b.addEventListener("click", function(){
+          var ci = +b.dataset.i;
+          var act = b.closest(".pl-act");
+          if (act){
+            var ai = +act.dataset.a;
+            var item = flat[ci];
+            if (item && item.actions && item.actions[ai]) try{ item.actions[ai].fn(); }catch(e){}
+            return;
+          }
+          var item = flat[ci];
+          if (!item) return;
+          if (item.kind === "clear"){ _clearRecent(); paint(q); return; }
+          _pushRecent(input.value || "");
+          UI.closePalette();
+          try{ item.fn(); }catch(e){}
+        });
+      });
+    }
+
+    function move(d){
+      if (!flat.length) return;
+      cursor = (cursor + d + flat.length) % flat.length;
+      input.setAttribute("aria-activedescendant", "pl-active-" + cursor);
+      draw();
+    }
 
     input.addEventListener("keydown", function(e){
       if (e.key === "ArrowDown"){ e.preventDefault(); move(1); }
       else if (e.key === "ArrowUp"){ e.preventDefault(); move(-1); }
       else if (e.key === "Enter"){
         e.preventDefault();
-        var sel = list.querySelector(".pl-item.sel");
-        if (sel) sel.click();
+        if (cursor >= 0 && flat[cursor]){
+          var item = flat[cursor];
+          if (item.kind === "clear"){ _clearRecent(); paint(input.value); return; }
+          _pushRecent(input.value || "");
+          UI.closePalette();
+          try{ item.fn(); }catch(e){}
+        }
       }
       else if (e.key === "Escape"){ UI.closePalette(); }
       else if (e.key === "Tab"){ e.preventDefault(); move(e.shiftKey ? -1 : 1); }
     });
 
-    var cursor = -1;
-    function move(d){
-      var items = list.querySelectorAll(".pl-item");
-      if (!items.length) return;
-      items.forEach(function(i){ i.classList.remove("sel"); i.removeAttribute("id"); });
-      cursor = (cursor + d + items.length) % items.length;
-      items[cursor].classList.add("sel");
-      items[cursor].id = "pl-active-" + cursor;
-      input.setAttribute("aria-activedescendant", items[cursor].id);
-      items[cursor].scrollIntoView({ block: "nearest" });
-    }
-
-    function items(filter){
-      filter = (filter || "").toLowerCase();
-      var groups = [];
-      var add = function(label, arr){ if (arr.length) groups.push({ label: label, items: arr }); };
-      var pg = [];
-      D.navPages.concat(D.extraPages).forEach(function(p){
-        if (!filter || (p.name + " " + p.en).toLowerCase().indexOf(filter) >= 0) pg.push({ ic: p.icon, title: p.name, sub: p.en, route: p.route, kind: "page", kindLabel: "صفحة" });
-      });
-      add("الصفحات", pg);
-      var ac = [];
-      ["task","homework","note","mistake","session"].forEach(function(a){
-        if (!filter || a.indexOf(filter) >= 0) ac.push({ ic: "plus", title: a === "task" ? "إضافة مهمة" : a === "homework" ? "إضافة واجب" : a === "note" ? "إضافة ملاحظة" : a === "mistake" ? "تسجيل خطأ" : "بدء جلسة", sub: "إجراء سريع", act: a, kind: "action", kindLabel: "إجراء" });
-      });
-      add("إجراءات سريعة", ac);
-      var tk = [];
-      st.tasks.slice(0, 50).forEach(function(t){ if (!filter || (t.title + " " + (t.desc || "") + " " + (t.lesson || "") + " " + D.subjName(t.subject)).toLowerCase().indexOf(filter) >= 0) tk.push({ ic: "tasks", kind: "task", id: t.id, title: t.title, sub: D.subjName(t.subject), route: "todo", kindLabel: "مهمة" }); });
-      add("المهام", tk);
-      var hw = [];
-      st.homework.slice(0, 50).forEach(function(h){ if (!filter || (h.title + " " + (h.lesson || "") + " " + (h.desc || "") + " " + D.subjName(h.subject) + " " + (h.priority || "")).toLowerCase().indexOf(filter) >= 0) hw.push({ ic: "homework", kind: "homework", id: h.id, title: h.title, sub: D.subjName(h.subject), route: "homework", kindLabel: "واجب" }); });
-      add("الواجبات", hw);
-      var nt = [];
-      st.notes.slice(0, 50).forEach(function(n){ if (!filter || (n.title + " " + n.content + " " + n.tags.join(" ")).toLowerCase().indexOf(filter) >= 0) nt.push({ ic: "notes", kind: "note", id: n.id, title: n.title.length > 55 ? n.title.slice(0, 55) + "…" : n.title, sub: D.subjName(n.subject), route: "notes", kindLabel: "ملاحظة" }); });
-      add("الملاحظات", nt);
-      var mi = [];
-      st.mistakes.slice(0, 50).forEach(function(x){ if (!filter || (x.question + " " + (x.notes || "") + " " + D.subjName(x.subject)).toLowerCase().indexOf(filter) >= 0) mi.push({ ic: "errors", kind: "mistake", id: x.id, title: x.question.length > 55 ? x.question.slice(0, 55) + "…" : x.question, sub: D.subjName(x.subject), route: "errors", kindLabel: "خطأ" }); });
-      add("الأخطاء", mi);
-      var ss = [];
-      st.blocks.slice(0, 50).forEach(function(b){ if (!filter || (b.title + " " + D.subjName(b.subject)).toLowerCase().indexOf(filter) >= 0) ss.push({ ic: "clock", kind: "session", title: b.title || D.subjName(b.subject), sub: U.fmtDate(b.date, { short: true }) + " · " + U.fmtDur(b.minutes), route: "timer", kindLabel: "جلسة" }); });
-      add("الجلسات", ss);
-      var flat = [];
-      groups.forEach(function(g){ flat.push.apply(flat, g.items); });
-      return { groups: groups, flat: flat };
-    }
-
-    function render(filter){
-      cursor = -1;
-      input.setAttribute("aria-activedescendant", "");
-      var got = items(filter);
-      if (!got.flat.length){
-        list.innerHTML = '<div class="pl-empty" role="option" aria-disabled="true"><span class="pl-empty-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg></span><span>لا توجد نتائج مطابقة</span><small>جرّب تعديل كلمة البحث</small></div>';
-        return;
-      }
-      var html = "", i = 0;
-      got.groups.forEach(function(g){
-        html += '<div class="pl-group" role="presentation">' + U.esc(g.label) + '</div>';
-        g.items.forEach(function(r){
-          html += '<button class="pl-item' + (i === 0 ? " sel" : "") + '" data-i="' + i + '" role="option" id="pl-active-' + i + '">' +
-            '<span class="pl-badge"></span>' +
-            '<span class="pl-ic">' + I.get(r.ic, 16) + '</span>' +
-            '<span class="pl-txt"><span class="pl-title">' + U.esc(r.title) + '</span><span class="pl-sub">' + U.esc(r.sub) + '</span></span>' +
-            (r.kindLabel ? '<span class="pl-kind">' + U.esc(r.kindLabel) + '</span>' : '') +
-          '</button>';
-          i++;
-        });
-      });
-      list.innerHTML = html;
-      if (i > 0) input.setAttribute("aria-activedescendant", "pl-active-0");
-      list.querySelectorAll(".pl-item").forEach(function(b){
-        b.addEventListener("click", function(){
-          var r = got.flat[+b.dataset.i];
-          UI.closePalette();
-          if (r && r.id){
-            if (r.kind === "task") App.Modals.openTaskModal(r.id);
-            else if (r.kind === "homework") App.Modals.openHwModal(r.id);
-            else if (r.kind === "note") App.Modals.openNoteModal(r.id);
-            else if (r.kind === "mistake") App.Modals.openMistakeModal(r.id);
-            else if (r.route) App.Router.go(r.route);
-            return;
-          }
-          if (r.route) App.Router.go(r.route);
-          else if (r.act === "task") App.Modals.openTaskModal();
-          else if (r.act === "homework") App.Modals.openHwModal();
-          else if (r.act === "note") App.Modals.openNoteModal();
-          else if (r.act === "mistake") App.Modals.openMistakeModal();
-          else if (r.act === "session") UI.startSessionFlow();
-        });
-      });
-    }
-
-    input.addEventListener("input", function(){ render(input.value); });
-    render("");
+    var _palDebounce = null;
+    input.addEventListener("input", function(){
+      clearTimeout(_palDebounce);
+      _palDebounce = setTimeout(function(){ paint(input.value); }, 100);
+    });
+    var overlay = document.getElementById("palette");
+    if (overlay) overlay.addEventListener("click", function(e){
+      if (e.target === overlay) UI.closePalette();
+    });
+    paint("");
     setTimeout(function(){ input.focus(); }, 60);
   }
 
