@@ -401,7 +401,7 @@ App.Modals = (function () {
 
     function collectResults(nq){
       var out = [];
-      var order = ["⚡ أوامر سريعة","📚 المواد","✓ المهام","📖 الواجبات","📝 الملاحظات","❌ الأخطاء","⏱ الجلسات"];
+      var order = ["⚡ أوامر سريعة","📄 الصفحات","📚 المواد","✓ المهام","📖 الواجبات","📝 الملاحظات","❌ الأخطاء","⏱ الجلسات"];
       function R(g,icon,title,sub,detail,kind,kindLabel,fn,actions,score){
         if (score > 0 && out.length < 70) out.push({g:g,icon:icon,title:title,sub:sub,detail:detail||"",kind:kind,kindLabel:kindLabel,fn:fn,actions:actions||[],score:score});
       }
@@ -417,6 +417,19 @@ App.Modals = (function () {
         if (!nq) sc = 55;
         else { var hl = _normAr(a.title); if (hl.indexOf(nq) >= 0) sc = 70; else if (_fuzzyHit(hl, nq)) sc = 35; }
         if (sc > 0) R("⚡ أوامر سريعة", a.ic, a.title, a.sub, "", "action", "إجراء", a.fn, [], sc);
+      });
+
+      D.navPages.concat(D.extraPages).forEach(function(p){
+        var sc = 0;
+        if (!nq) sc = 45;
+        else {
+          var hl = _normAr(p.name + " " + p.en);
+          if (hl.indexOf(nq) >= 0) sc = 75;
+          else if (_xMatch(nq, p.name)) sc = 65;
+          else if (_fuzzyHit(hl, nq)) sc = 35;
+        }
+        if (sc > 0) R("📄 الصفحات", p.icon, p.name, p.en, "", "page", "صفحة",
+          function(){UI.closePalette();App.Router.go(p.route)}, [], sc);
       });
 
       (st.subjects || []).slice(0, 20).forEach(function(s){
