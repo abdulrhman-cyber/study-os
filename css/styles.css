@@ -1662,7 +1662,7 @@ html[data-theme="light"] .ai-md pre{background:rgba(9,10,12,.8)}
 .ls-toolbar-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0;flex-wrap:wrap}
 .ls-toolbar-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .ls-search-wrap{position:relative;flex:1;min-width:200px;max-width:360px}
-.ls-search-icon{position:absolute;inset-inline-start:12px;top:50%;transform:translateY(-50%);color:var(--text-4);pointer-events:none;display:flex}
+.ls-search-icon{position:absolute;inset-inline-start:12px;top:50%;transform:translateY(-50%);color:var(--text-4);pointer-events:none;display:flex;align-items:center;justify-content:center;width:18px;height:18px;flex-shrink:0}
 .ls-search-input{width:100%;padding:9px 14px 9px 38px;border-radius:999px;border:1px solid var(--line);background:var(--solid);color:var(--text);font-size:13px;transition:border-color .18s}
 .ls-search-input:focus{outline:none;border-color:var(--gold-2);box-shadow:0 0 0 3px rgba(214,183,122,.14)}
 .ls-filter-group{display:flex;gap:6px;flex-wrap:wrap}
