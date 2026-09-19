@@ -485,7 +485,7 @@ App.Modals = (function () {
       var nq = _normAr(q);
 
       if (!nq){
-        collectResults("").forEach(function(r){ if (r.kind === "action") flat.push(r); });
+        collectResults("").forEach(function(r){ if (r.kind === "action" || r.kind === "page") flat.push(r); });
         var rs = _recentSearches();
         if (rs.length){
           flat.push({g:"🕘 عمليات البحث الأخيرة",icon:"🗑",title:"مسح سجل البحث",sub:"",kind:"clear",kindLabel:"",fn:function(){_clearRecent();paint(q)},actions:[],score:1});
