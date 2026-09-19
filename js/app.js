@@ -320,6 +320,14 @@ window.App = window.App || {};
       window.addEventListener("load", () => {
         navigator.serviceWorker.register("sw.js").catch(() => {});
       });
+    window.addEventListener("beforeinstallprompt", function(e){
+      e.preventDefault();
+      window._deferredInstall = e;
+    });
+    window.addEventListener("appinstalled", function(){
+      window._deferredInstall = null;
+      UI.toast && UI.toast("تم تثبيت Study OS بنجاح!", "success", "check");
+    });
     checkReminders();
     setInterval(checkReminders, 60 * 1000);
     route();

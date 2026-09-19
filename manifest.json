@@ -1,0 +1,28 @@
+{
+  "name": "Study OS — نظام تشغيل دراستك",
+  "short_name": "Study OS",
+  "description": "نظام تشغيل ذكي لإدارة دراستك: مهام، واجبات، ملاحظات، جلسات تركيز، تحليلات، والمساعد الذكي بالذكاء الاصطناعي.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#090A0C",
+  "theme_color": "#0E1013",
+  "dir": "rtl",
+  "lang": "ar",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "img/logo.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "img/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

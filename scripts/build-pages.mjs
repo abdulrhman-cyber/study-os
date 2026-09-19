@@ -12,7 +12,7 @@ import { dirname, join } from "node:path";
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(rootDir, "_site");
 
-const FILES = ["index.html", "404.html", "sw.js", ".nojekyll"];
+const FILES = ["index.html", "404.html", "sw.js", "manifest.json", ".nojekyll"];
 const DIRS = ["css", "js", "img"];
 const SKIP = /(^|[\\/])(\.DS_Store|Thumbs\.db)$|\.bak$|\.log$/i;
 

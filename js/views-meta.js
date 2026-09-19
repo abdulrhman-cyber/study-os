@@ -368,6 +368,11 @@ const syncBody =
         '<button class="btn sm danger" id="ai-settings-delete">حذف المفتاح</button>' +
       '</div>';
 
+    const installBody =
+      '<div class="set-row"><div class="sr-txt"><b>تثبيت التطبيق</b><span>أضف Study OS إلى شاشة هاتفك كتطبيق مستقل — يعمل بدون متصفح مع إشعارات ووضع ملء الشاشة</span></div>' +
+        '<div class="sr-ctl"><button class="btn sm primary" id="install-app">' + I.get("export", 14) + 'تثبيت</button></div></div>' +
+      '<div class="set-row" id="install-status-row" style="display:none"><div class="sr-txt"><span id="install-status" class="muted small"></span></div></div>';
+
     const dangerBody =
       srow("إعادة ضبط التطبيق", "حذف كل المهام والجلسات والملاحظات والإحصائيات",
         '<button class="btn danger sm" data-set="reset">إعادة تعيين</button>') +
@@ -384,6 +389,7 @@ const syncBody =
         card("", "", "box", "البيانات", "إدارة بياناتك ونسخك الاحتياطية", dataBody) +
         card("", "", "cloud", "السحابة", "اربط حساب Google للمزامنة عبر الأجهزة", syncBody) +
         card("", "", "robot", "المساعد الذكي", "إعداد مفتاح Gemini API للمساعد الذكي", aiBody) +
+        card("", "", "export", "تثبيت التطبيق", "أضف Study OS إلى هاتفك", installBody) +
         card("", "danger", "trash", "منطقة الخطر", "إجراءات لا يمكن التراجع عنها", dangerBody) +
       '</div>';
   }
@@ -429,6 +435,27 @@ const syncBody =
         });
       } else UI.toast("السحابة غير محمّلة.", "error", "info");
     });
+    var installBtn = root.querySelector("#install-app");
+    if (installBtn){
+      installBtn.addEventListener("click", function(){
+        var e = window._deferredInstall;
+        if (!e){
+          var row = root.querySelector("#install-status-row");
+          var st2 = root.querySelector("#install-status");
+          if (row) row.style.display = "";
+          if (st2) st2.textContent = "التطبيق مثبت بالفعل أو المتصفح لا يدعم التثبيت — يمكنك إضافة الصفحة إلى الشاشة الرئيسية يدويًا من قائمة المتصفح.";
+          return;
+        }
+        e.prompt().then(function(res){
+          if (res && res.outcome === "accepted"){
+            UI.toast && UI.toast("جارٍ تثبيت Study OS…", "gold", "download");
+          }
+          window._deferredInstall = null;
+        }).catch(function(){
+          UI.toast && UI.toast("تعذّر التثبيت — حاول مجددًا.", "error", "close");
+        });
+      });
+    }
     root.querySelectorAll("[data-seg]").forEach(b => b.addEventListener("click", () => {
       const target = b.dataset.seg, v = b.dataset.v;
       if (target === "theme"){ S.updateSettings({ theme: v }); App.Router.applyTheme(); }
