@@ -408,7 +408,7 @@ App.Modals = (function () {
       input.setAttribute("aria-activedescendant", "");
       var got = items(filter);
       if (!got.flat.length){
-        list.innerHTML = '<div class="pl-empty" role="option" aria-disabled="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg><span>لا توجد نتائج مطابقة</span><small style="color:var(--text-4)">جرّب تعديل كلمة البحث</small></div>';
+        list.innerHTML = '<div class="pl-empty" role="option" aria-disabled="true"><span class="pl-empty-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg></span><span>لا توجد نتائج مطابقة</span><small>جرّب تعديل كلمة البحث</small></div>';
         return;
       }
       var html = "", i = 0;
