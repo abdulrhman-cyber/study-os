@@ -318,111 +318,139 @@ App.Modals = (function () {
   }
 
   /* ══════════════ COMMAND PALETTE ══════════════ */
+  let palLastFocused = null;
   function openPalette(){
     if (UI.closePalette) return;
+    palLastFocused = document.activeElement;
     const st = S.getState();
     const m = UI.openModal(
-      '<div id="palette" class="palette open" role="dialog" aria-modal="true" aria-label="بحث سريع">' +
+      '<div id="palette" class="palette open" role="dialog" aria-modal="true" aria-label="بحث سريع" aria-combobox="list" aria-expanded="true">' +
         '<div class="palette-box">' +
-          '<div class="palette-input">' +
-            '<span class="pl-search-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>' +
-            '<input id="palette-input" class="palette-search" placeholder="ابحث عن صفحة، مهمة، واجب، ملاحظة…" autocomplete="off">' +
-            '<kbd>Ctrl K</kbd></div>' +
-          '<div class="palette-list" id="palette-list"></div>' +
-          '<div class="palette-hint"><span><kbd>↑</kbd><kbd>↓</kbd> للتحريك</span><span><kbd>Enter</kbd> للفتح</span><span><kbd>Esc</kbd> للإغلاق</span></div>' +
+          '<div class="palette-header">' +
+            '<span class="pl-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>' +
+            '<input id="palette-input" class="palette-input" placeholder="ابحث عن صفحة، مهمة، واجب…" autocomplete="off" aria-label="بحث" role="combobox" aria-controls="palette-list" aria-activedescendant="">' +
+            '<span class="pl-shortcut"><kbd>Ctrl K</kbd></span>' +
+          '</div>' +
+          '<div class="palette-body" id="palette-list" role="listbox" aria-label="نتائج البحث"></div>' +
+          '<div class="palette-footer">' +
+            '<div class="footer-left">' +
+              '<span class="pl-hint"><kbd>↑</kbd><kbd>↓</kbd> للتحريك</span>' +
+              '<span class="pl-hint"><kbd>↵</kbd> للتنفيذ</span>' +
+              '<span class="pl-hint"><kbd>Esc</kbd> للإغلاق</span>' +
+            '</div>' +
+          '</div>' +
         '</div>' +
       '</div>', {});
-    UI.closePalette = () => { UI.closeModal(); UI.closePalette = null; };
+    UI.closePalette = () => { UI.closeModal(); UI.closePalette = null; if (palLastFocused && palLastFocused.focus) try{palLastFocused.focus();}catch(e){} };
     const input = document.getElementById("palette-input");
     const list = document.getElementById("palette-list");
-    input.addEventListener("keydown", e => {
+
+    input.addEventListener("keydown", function(e){
       if (e.key === "ArrowDown"){ e.preventDefault(); move(1); }
       else if (e.key === "ArrowUp"){ e.preventDefault(); move(-1); }
-      else if (e.key === "Enter"){ e.preventDefault(); const a = list.querySelector(".sel"); if (a) a.click(); }
+      else if (e.key === "Enter"){
+        e.preventDefault();
+        var sel = list.querySelector(".pl-item.sel");
+        if (sel) sel.click();
+      }
       else if (e.key === "Escape"){ UI.closePalette(); }
+      else if (e.key === "Tab"){ e.preventDefault(); move(e.shiftKey ? -1 : 1); }
     });
-    let cursor = -1;
+
+    var cursor = -1;
     function move(d){
-      const items = list.querySelectorAll(".pl-item");
+      var items = list.querySelectorAll(".pl-item");
       if (!items.length) return;
-      items.forEach(i => i.classList.remove("sel"));
+      items.forEach(function(i){ i.classList.remove("sel"); i.removeAttribute("id"); });
       cursor = (cursor + d + items.length) % items.length;
       items[cursor].classList.add("sel");
+      items[cursor].id = "pl-active-" + cursor;
+      input.setAttribute("aria-activedescendant", items[cursor].id);
       items[cursor].scrollIntoView({ block: "nearest" });
     }
+
     function items(filter){
       filter = (filter || "").toLowerCase();
-      const groups = [];
-      const add = (label, arr) => { if (arr.length) groups.push({ label: label, items: arr }); };
-      const pg = [];
-      D.navPages.concat(D.extraPages).forEach(p => {
-        if (!filter || (p.name + " " + p.en).toLowerCase().indexOf(filter) >= 0) pg.push({ ic: p.icon, title: p.name, sub: "صفحة", route: p.route, kindLabel: "صفحة" });
+      var groups = [];
+      var add = function(label, arr){ if (arr.length) groups.push({ label: label, items: arr }); };
+      var pg = [];
+      D.navPages.concat(D.extraPages).forEach(function(p){
+        if (!filter || (p.name + " " + p.en).toLowerCase().indexOf(filter) >= 0) pg.push({ ic: p.icon, title: p.name, sub: p.en, route: p.route, kind: "page", kindLabel: "صفحة" });
       });
       add("الصفحات", pg);
-      const ac = [];
-      ["task","homework","note","mistake","session"].forEach(a => {
-        if (!filter || a.indexOf(filter) >= 0) ac.push({ ic: "plus", title: a === "task" ? "إضافة مهمة" : a === "homework" ? "إضافة واجب" : a === "note" ? "إضافة ملاحظة" : a === "mistake" ? "تسجيل خطأ" : "بدء جلسة", sub: "إجراء سريع", act: a, kindLabel: "سريع" });
+      var ac = [];
+      ["task","homework","note","mistake","session"].forEach(function(a){
+        if (!filter || a.indexOf(filter) >= 0) ac.push({ ic: "plus", title: a === "task" ? "إضافة مهمة" : a === "homework" ? "إضافة واجب" : a === "note" ? "إضافة ملاحظة" : a === "mistake" ? "تسجيل خطأ" : "بدء جلسة", sub: "إجراء سريع", act: a, kind: "action", kindLabel: "إجراء" });
       });
       add("إجراءات سريعة", ac);
-      const tk = [];
-      st.tasks.slice(0, 50).forEach(t => { if (!filter || (t.title + " " + (t.desc || "") + " " + (t.lesson || "") + " " + D.subjName(t.subject)).toLowerCase().indexOf(filter) >= 0) tk.push({ ic: "tasks", kind: "task", id: t.id, title: t.title, sub: "مهمة · " + D.subjName(t.subject), route: "todo", kindLabel: "مهمة" }); });
+      var tk = [];
+      st.tasks.slice(0, 50).forEach(function(t){ if (!filter || (t.title + " " + (t.desc || "") + " " + (t.lesson || "") + " " + D.subjName(t.subject)).toLowerCase().indexOf(filter) >= 0) tk.push({ ic: "tasks", kind: "task", id: t.id, title: t.title, sub: D.subjName(t.subject), route: "todo", kindLabel: "مهمة" }); });
       add("المهام", tk);
-      const hw = [];
-      st.homework.slice(0, 50).forEach(h => { if (!filter || (h.title + " " + (h.lesson || "") + " " + (h.desc || "") + " " + D.subjName(h.subject) + " " + (h.priority || "")).toLowerCase().indexOf(filter) >= 0) hw.push({ ic: "homework", kind: "homework", id: h.id, title: h.title, sub: "واجب · " + D.subjName(h.subject), route: "homework", kindLabel: "واجب" }); });
+      var hw = [];
+      st.homework.slice(0, 50).forEach(function(h){ if (!filter || (h.title + " " + (h.lesson || "") + " " + (h.desc || "") + " " + D.subjName(h.subject) + " " + (h.priority || "")).toLowerCase().indexOf(filter) >= 0) hw.push({ ic: "homework", kind: "homework", id: h.id, title: h.title, sub: D.subjName(h.subject), route: "homework", kindLabel: "واجب" }); });
       add("الواجبات", hw);
-      const nt = [];
-      st.notes.slice(0, 50).forEach(n => { if (!filter || (n.title + " " + n.content + " " + n.tags.join(" ")).toLowerCase().indexOf(filter) >= 0) nt.push({ ic: "notes", kind: "note", id: n.id, title: n.title.length > 60 ? n.title.slice(0, 60) + "…" : n.title, sub: "ملاحظة · " + D.subjName(n.subject), route: "notes", kindLabel: "ملاحظة" }); });
+      var nt = [];
+      st.notes.slice(0, 50).forEach(function(n){ if (!filter || (n.title + " " + n.content + " " + n.tags.join(" ")).toLowerCase().indexOf(filter) >= 0) nt.push({ ic: "notes", kind: "note", id: n.id, title: n.title.length > 55 ? n.title.slice(0, 55) + "…" : n.title, sub: D.subjName(n.subject), route: "notes", kindLabel: "ملاحظة" }); });
       add("الملاحظات", nt);
-      const mi = [];
-      st.mistakes.slice(0, 50).forEach(x => { if (!filter || (x.question + " " + (x.notes || "") + " " + D.subjName(x.subject)).toLowerCase().indexOf(filter) >= 0) mi.push({ ic: "errors", kind: "mistake", id: x.id, title: x.question.length > 60 ? x.question.slice(0, 60) + "…" : x.question, sub: "خطأ · " + D.subjName(x.subject), route: "errors", kindLabel: "خطأ" }); });
+      var mi = [];
+      st.mistakes.slice(0, 50).forEach(function(x){ if (!filter || (x.question + " " + (x.notes || "") + " " + D.subjName(x.subject)).toLowerCase().indexOf(filter) >= 0) mi.push({ ic: "errors", kind: "mistake", id: x.id, title: x.question.length > 55 ? x.question.slice(0, 55) + "…" : x.question, sub: D.subjName(x.subject), route: "errors", kindLabel: "خطأ" }); });
       add("الأخطاء", mi);
-      const ss = [];
-      st.blocks.slice(0, 50).forEach(b => { if (!filter || (b.title + " " + D.subjName(b.subject)).toLowerCase().indexOf(filter) >= 0) ss.push({ ic: "clock", title: b.title || D.subjName(b.subject), sub: "جلسة · " + U.fmtDate(b.date, { short: true }) + " · " + U.fmtDur(b.minutes), route: "timer", kindLabel: "جلسة" }); });
+      var ss = [];
+      st.blocks.slice(0, 50).forEach(function(b){ if (!filter || (b.title + " " + D.subjName(b.subject)).toLowerCase().indexOf(filter) >= 0) ss.push({ ic: "clock", kind: "session", title: b.title || D.subjName(b.subject), sub: U.fmtDate(b.date, { short: true }) + " · " + U.fmtDur(b.minutes), route: "timer", kindLabel: "جلسة" }); });
       add("الجلسات", ss);
-      const flat = [];
-      groups.forEach(g => flat.push.apply(flat, g.items));
+      var flat = [];
+      groups.forEach(function(g){ flat.push.apply(flat, g.items); });
       return { groups: groups, flat: flat };
     }
+
     function render(filter){
       cursor = -1;
-      const got = items(filter);
-      if (!got.flat.length){ list.innerHTML = '<div class="pl-empty"><span class="e">🔍</span>لا توجد نتائج مطابقة.</div>'; return; }
-      let html = "", i = 0;
-      got.groups.forEach(g => {
-        html += '<div class="pl-group">' + U.esc(g.label) + '</div>';
-        g.items.forEach(r => {
-          html += '<button class="pl-item' + (i === 0 ? " sel" : "") + '" data-i="' + i + '" role="option">' +
+      input.setAttribute("aria-activedescendant", "");
+      var got = items(filter);
+      if (!got.flat.length){
+        list.innerHTML = '<div class="pl-empty" role="option" aria-disabled="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg><span>لا توجد نتائج مطابقة</span><small style="color:var(--text-4)">جرّب تعديل كلمة البحث</small></div>';
+        return;
+      }
+      var html = "", i = 0;
+      got.groups.forEach(function(g){
+        html += '<div class="pl-group" role="presentation">' + U.esc(g.label) + '</div>';
+        g.items.forEach(function(r){
+          html += '<button class="pl-item' + (i === 0 ? " sel" : "") + '" data-i="' + i + '" role="option" id="pl-active-' + i + '">' +
             '<span class="pl-badge"></span>' +
             '<span class="pl-ic">' + I.get(r.ic, 16) + '</span>' +
-            '<span class="pl-txt"><div class="pl-title">' + U.esc(r.title) + '</div><div class="pl-sub">' + U.esc(r.sub) + '</div></span>' +
+            '<span class="pl-txt"><span class="pl-title">' + U.esc(r.title) + '</span><span class="pl-sub">' + U.esc(r.sub) + '</span></span>' +
             (r.kindLabel ? '<span class="pl-kind">' + U.esc(r.kindLabel) + '</span>' : '') +
           '</button>';
           i++;
         });
       });
       list.innerHTML = html;
-      list.querySelectorAll(".pl-item").forEach(b => b.addEventListener("click", () => {
-        const r = got.flat[+b.dataset.i];
-        UI.closePalette();
-        if (r && r.id){
-          if (r.kind === "task") App.Modals.openTaskModal(r.id);
-          else if (r.kind === "homework") App.Modals.openHwModal(r.id);
-          else if (r.kind === "note") App.Modals.openNoteModal(r.id);
-          else if (r.kind === "mistake") App.Modals.openMistakeModal(r.id);
-          else if (r.route) App.Router.go(r.route);
-          return;
-        }
-        if (r.route) App.Router.go(r.route);
-        else if (r.act === "task") App.Modals.openTaskModal();
-        else if (r.act === "homework") App.Modals.openHwModal();
-        else if (r.act === "note") App.Modals.openNoteModal();
-        else if (r.act === "mistake") App.Modals.openMistakeModal();
-        else if (r.act === "session") UI.startSessionFlow();
-      }));
+      if (i > 0) input.setAttribute("aria-activedescendant", "pl-active-0");
+      list.querySelectorAll(".pl-item").forEach(function(b){
+        b.addEventListener("click", function(){
+          var r = got.flat[+b.dataset.i];
+          UI.closePalette();
+          if (r && r.id){
+            if (r.kind === "task") App.Modals.openTaskModal(r.id);
+            else if (r.kind === "homework") App.Modals.openHwModal(r.id);
+            else if (r.kind === "note") App.Modals.openNoteModal(r.id);
+            else if (r.kind === "mistake") App.Modals.openMistakeModal(r.id);
+            else if (r.route) App.Router.go(r.route);
+            return;
+          }
+          if (r.route) App.Router.go(r.route);
+          else if (r.act === "task") App.Modals.openTaskModal();
+          else if (r.act === "homework") App.Modals.openHwModal();
+          else if (r.act === "note") App.Modals.openNoteModal();
+          else if (r.act === "mistake") App.Modals.openMistakeModal();
+          else if (r.act === "session") UI.startSessionFlow();
+        });
+      });
     }
-    input.addEventListener("input", () => render(input.value));
+
+    input.addEventListener("input", function(){ render(input.value); });
     render("");
-    setTimeout(() => input.focus(), 60);
+    setTimeout(function(){ input.focus(); }, 60);
   }
 
   /* ══════════════ FAB quick-add ══════════════ */
