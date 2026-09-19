@@ -66,10 +66,10 @@ html[dir="ltr"] .fab-wrap { right: max(26px, env(safe-area-inset-right)); left: 
   padding-right: max(20px, env(safe-area-inset-right));
 }
 .palette {
-  padding-top: max(8vh, env(safe-area-inset-top));
-  padding-left: max(12px, env(safe-area-inset-left));
-  padding-right: max(12px, env(safe-area-inset-right));
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding-top: max(6vh, env(safe-area-inset-top));
+  padding-left: max(10px, env(safe-area-inset-left));
+  padding-right: max(10px, env(safe-area-inset-right));
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
 }
 .boot {
   padding-top: env(safe-area-inset-top);
